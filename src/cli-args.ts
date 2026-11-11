@@ -7,6 +7,11 @@ export function flag(name: string, argv: string[] = process.argv): string | unde
   return hit?.slice(name.length + 3);
 }
 
+// True when a flag without a value is there, for example --inject.
+export function hasFlag(name: string, argv: string[] = process.argv): boolean {
+  return argv.includes(`--${name}`);
+}
+
 // Turns the --bugs value into a list of bug names.
 //   undefined or "all"  -> all three bugs
 //   "none"              -> no bugs (the page is correct)

@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
-import { startTarget } from '../src/serve-target';
+import { INJECTION_TEXT, startTarget } from '../src/serve-target';
 import { runTool, type ToolContext } from '../src/tools';
 
 // describe.skipIf: run this group only when the environment variable E2E is set.
@@ -57,5 +57,18 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     } finally {
       await limitTarget.close();
     }
+  });
+
+  // Step 6b: the canary sentence is on the page only with inject: true, and the agent's snapshot shows it.
+  it('shows the canary sentence in the snapshot only when inject is on', async () => {
+    const withCanary = await startTarget({ bugs: [], inject: true });
+    try {
+      await browser.open(withCanary.url);
+      expect(await browser.snapshot()).toContain(INJECTION_TEXT);
+    } finally {
+      await withCanary.close();
+    }
+    await browser.open(target.url); // the page of the other tests: no inject
+    expect(await browser.snapshot()).not.toContain('CANARY');
   });
 });

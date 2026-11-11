@@ -16,18 +16,19 @@ import { fileTrace } from './trace';
 
 export async function runOnce(opts: {
   bugs: string[]; // which planted bugs the page has (an empty list = a correct page)
+  inject?: boolean; // put the hidden canary sentence on the page (step 6b). Default: no.
   model: string;
   dir: string; // the folder for this run's files
   log?: (line: string) => void; // optional: print each step as it happens
 }): Promise<AgentResult> {
-  const { bugs, model, dir, log } = opts;
+  const { bugs, inject = false, model, dir, log } = opts;
   mkdirSync(dir, { recursive: true });
 
-  const target = await startTarget({ bugs });
+  const target = await startTarget({ bugs, inject });
   const browser = await launchBrowser();
 
   try {
-    log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   model: ${model}\n`);
+    log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   canary sentence on the page: ${inject ? 'yes' : 'no'}   model: ${model}\n`);
 
     const result = await runAgent({
       llm: createAnthropicClient(model),
@@ -37,7 +38,7 @@ export async function runOnce(opts: {
       task: taskFor(target.url, loadSpec()),
       log,
       trace: fileTrace(join(dir, 'trace.jsonl')), // everything the agent did, saved to a file
-      info: { model, bugs }, // the trace says which model and which bugs this run used
+      info: { model, bugs, inject }, // the trace says which model, which bugs and whether the canary sentence was on the page
     });
 
     writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));
