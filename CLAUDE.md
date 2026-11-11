@@ -1,7 +1,6 @@
 # qa-agent-mini
 
-A tiny QA agent, built step by step so its owner learns how agents are made. The owner is an experienced
-QA engineer, new to AI engineering. This repo is also interview preparation, so every step must be understandable.
+A tiny QA agent, built step by step to learn how agents are made. Every step must be easy to understand.
 
 ## How we work
 
