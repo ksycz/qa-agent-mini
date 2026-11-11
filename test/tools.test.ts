@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { BrowserPort } from '../src/browser';
-import { assertAllowed, runTool, TOOL_DEFS, type ToolContext } from '../src/tools';
+import { assertAllowed, MAX_VISITORS_PER_CALL, runTool, TOOL_DEFS, type ToolContext } from '../src/tools';
 
 // Builds a tool context around a fake browser. `overrides` changes single settings for one test.
 // `log` collects what the fake browser was asked to do.
@@ -80,5 +80,50 @@ describe('runTool', () => {
       const input = Object.fromEntries(required.map((k) => [k, 'x']));
       await runTool(ctx(), t.name, input).catch((e: Error) => expect(e.message).not.toMatch(/Unknown tool/));
     }
+  });
+});
+
+// Step 6e: add_visitors does fill + click for every age, and reads the page after every click.
+describe('add_visitors', () => {
+  // A fake browser whose page shows an alert line after the Nth click (never when `alertAfter` is 0).
+  function fakeShop(alertAfter = 0) {
+    const log: string[] = [];
+    let clicks = 0;
+    const c = ctx({ maxSnapshotChars: 1000 }, log);
+    c.browser.click = async (r, n) => void (clicks++, log.push(`click ${r}/${n}`));
+    c.browser.snapshot = async () =>
+      alertAfter > 0 && clicks === alertAfter ? '- alert: Maximum 10 tickets per order.' : `- paragraph: ${clicks} tickets`;
+    return { c, log };
+  }
+
+  it('fills and clicks once per age, in order, and returns the page', async () => {
+    const { c, log } = fakeShop();
+    const out = await runTool(c, 'add_visitors', { ages: '30, 65 8' }); // commas and spaces both work
+    expect(log).toEqual([
+      'fill Visitor age=30', 'click button/Add visitor',
+      'fill Visitor age=65', 'click button/Add visitor',
+      'fill Visitor age=8', 'click button/Add visitor',
+    ]);
+    expect(out).toBe('Added 3 of 3 visitors.\n- paragraph: 3 tickets');
+  });
+
+  it('stops at the first message of the page and tells the model what it said', async () => {
+    const { c, log } = fakeShop(2); // the page complains after the 2nd click
+    const out = await runTool(c, 'add_visitors', { ages: '1,2,3,4' });
+    expect(out).toContain('Stopped after age 2 (2 of 4)');
+    expect(out).toContain('Maximum 10 tickets per order.');
+    expect(out).toContain('The remaining ages were not added.');
+    expect(log.filter((l) => l.startsWith('click'))).toHaveLength(2); // ages 3 and 4 were never tried
+  });
+
+  it('refuses bad input before the browser is touched', async () => {
+    const { c, log } = fakeShop();
+    await expect(runTool(c, 'add_visitors', { ages: '' })).rejects.toThrow(/Empty argument/);
+    await expect(runTool(c, 'add_visitors', { ages: ' , ' })).rejects.toThrow(/No ages/);
+    await expect(runTool(c, 'add_visitors', { ages: '30, abc' })).rejects.toThrow(/"abc" is not a whole number/);
+    await expect(runTool(c, 'add_visitors', { ages: '-5' })).rejects.toThrow(/not a whole number/);
+    const tooMany = Array.from({ length: MAX_VISITORS_PER_CALL + 1 }, () => '30').join(',');
+    await expect(runTool(c, 'add_visitors', { ages: tooMany })).rejects.toThrow(/Too many ages/);
+    expect(log).toEqual([]); // nothing was typed anywhere
   });
 });
