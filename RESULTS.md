@@ -107,10 +107,37 @@ Rows are filled in as the runs come in, one pull request for the whole baseline.
 
 | Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Largest order | Stopped because |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 7 | | | all 3 bugs | | | | | | | |
+| [7](results/run-07-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed, see run 7) | all 3 bugs | 2 of 3 | 0 | 13 | 84,139 / 6,937 | 0 | 10 | token budget (80,000) |
 | 8 | | | all 3 bugs | | | | | | | |
 | 9 | | | all 3 bugs | | | | | | | |
 | 10 | | | no bugs | n/a | | | | | | |
+
+### Run 7 (baseline v3, first run)
+
+For this run we have the trace (`results/run-07-trace.jsonl`) and not the terminal output. The trace holds everything except the model name,
+so "claude-haiku-5-5" is an assumption: it is the default, and the plan says nothing was changed. Idea for later: write the model name into the first trace line.
+
+**Found 2 of 3:** `senior-discount` (step 6) and `group-threshold` (step 12). **Missed:** `limit-off-by-one`. **False alarms:** 0 (both reports match planted bugs). **Reloads:** 0.
+13 steps, 84,139 / 6,937 tokens, stopped on the token budget.
+
+**The guard did its job.** In step 8 the model sent 8 clicks on "Add visitor" in one reply. The field empties after every successful add, so clicks 2 to 8 hit an empty field.
+Click 2 changed the page (the message "Enter an age from 0 to 120." appeared), clicks 3 and 4 changed nothing, so at click 4 the guard added its warning to the result.
+It did not stop the run: the other four clicks were in the same step, and the model had not yet been able to read the warning. In step 9 the model did something different.
+In runs 4 to 6 the old guard ended the run in this kind of situation. We cannot tell if the model reacted to the warning or only to the page (its text mentions the empty field, not the warning).
+
+**The run reached what runs 4 to 6 could not:** an order of 8 tickets (all €20.00, no discount: the planted bug, found) and an order of 10 tickets (all €18.00).
+
+**Why `limit-off-by-one` was missed:** the model did ask for the 11th ticket in step 13, but the token budget is checked before the tools of a reply are run, so that step never ran.
+Steps 8 to 10, where the model lost its way with the batch, cost about 27,300 tokens. The token budget is now what ends the runs, as in runs 1 to 3.
+
+**A cut-off reply, probably.** Step 9 used exactly 1,000 output tokens, which is `maxTokensPerReply`, and its last call, `click`, arrived with no arguments (`{}`).
+The new argument check refused it with a readable message (`Missing argument "role"`), and the model corrected itself in step 10. That the reply was cut by the limit is a guess: the trace does not say why a reply ended.
+If it is true, it would also explain the forgotten arguments in runs 1 to 3 (many calls in one reply). Idea for later: write the stop reason of every reply into the trace.
+
+**Against the guesses in the plan:** (1) no `repeated_call`: true. (2) more steps and tokens than baseline v2: true (13 steps, 91,076 tokens in total). (3) orders of 8 and 10 tickets reached: true.
+(4) no false alarms on the page without bugs: not measured yet (run 10).
+
+One run is an anecdote. The next runs show whether the budget again ends the run before the 11th ticket.
 
 ## Summary of runs 1 and 2
 
