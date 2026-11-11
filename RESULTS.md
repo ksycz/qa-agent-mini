@@ -285,6 +285,59 @@ The guard warned once (step 10, a batch of identical "Add visitor" clicks, 9,949
 **Candidates after this run** (each its own pull request): run the tools of the last reply before the budget stop (issue #20); issue #18 (a cut-off reply is not `done`, and its half call is not run);
 the size of `maxTokensPerReply` and the hidden thinking; trimming old snapshots (the largest lever, because input is 92% of the cost).
 
+## Baseline v4: after reply handling, measured with the eval
+
+**What changed since baseline v3:** the trace diagnostics (PR #19), reply handling (PR #22: a cut-off reply is not `done`, its half call is not run, the tools of the last reply run before the budget stop),
+and the eval (PR #24, `npm run eval`). Prompt, limits, model (`claude-haiku-5-5`) and the page are the same.
+Honest note: unlike for baseline v3, we did not write our guesses down before measuring. What follows is only what the numbers show.
+
+**What we have**
+
+- Run 12 (bugs all) and run 13 (no bugs): single runs with a full trace (`results/run-12-trace.jsonl`, `results/run-13-trace.jsonl`), taken before the eval existed.
+- The first two evals, 3 runs each: bugs all (`results/eval-all-summary.md`) and no bugs (`results/eval-none-summary.md`). Only the summaries were kept, not the traces of these six runs, so we cannot look inside them.
+
+### Run 12 and run 13
+
+**Run 12 (bugs all):** 7 steps, 25,667 tokens, stopped on `done`, found 1 of 3 (`senior-discount`), 0 false alarms. Step 4 was cut off at 1,000 tokens and its last call was `fill {}`.
+There is no `tool_error` for it in the trace, so the half call was not run, as intended. After the report the model stopped by itself and wrote that it had run out of step budget.
+That was not true: it had used 7 of 25 steps and about a third of the tokens. Its own summary listed the limit, the group discount, validation and "Clear order" as not tested.
+This is a different failure from run 9 (there the reply was cut off and empty). One run cannot say whether the new line about cut-off replies plays a part.
+
+**Run 13 (no bugs):** 13 steps, 90,412 tokens, stopped on `token_budget`, 0 reports (correct). Step 12 was cut off, its last call was `click` without `name`, and it was not run
+(no `tool_error`). In step 13 the model wrote that the last add had not run, so it knew. The total was 77,600 tokens after step 12 and 90,412 after step 13, yet the `click` and `snapshot` of step 13 are in the trace
+before the `stop` line: the tools of the reply that crossed the budget now run (issue #20 works). The usual batch of seven "Add visitor" clicks without refilling the age field happened again in step 7 (guard warning).
+
+### The first evals
+
+| | Baseline v3 (runs 7 to 9, before the fixes) | Baseline v4 eval (3 runs, all bugs) |
+|---|---|---|
+| `senior-discount` reported | 3 of 3 | 3 of 3 |
+| `group-threshold` reported | 2 of 3 | 3 of 3 |
+| `limit-off-by-one` reported | 0 of 3 | 1 of 3 |
+| False alarms | 0 | 0 |
+| Tokens per run (mean) | 78,600 | 83,368 |
+| Steps per run (mean) | 12 | 12.7 |
+| Stopped on the token budget | 2 of 3 | 2 of 3 (the third: `done` at 76,347) |
+| Guard warnings / stops | 2 / 0 | 3 / 0 |
+
+On the page without bugs: 0 false alarms in 3 eval runs (all stopped on the token budget at 87,228 to 91,913 tokens, one cut-off reply each), and 0 in run 13.
+
+**What the numbers say, and what they do not**
+
+1. **The reports are not lost any more in the way they were in run 9 and run 11,** and the agent found more bugs per run than in v3 (7 reports in 3 runs, against 5 in 3 runs). But the differences are one run each (group 2 of 3 against 3 of 3, limit 0 of 3 against 1 of 3).
+   With three runs per side that is within the normal variation, so we do not claim the fixes caused it. Together with run 12, the 4 runs with bugs after the fixes give: senior 4 of 4, group 3 of 4, limit 1 of 4.
+2. **No false alarms** in 8 runs on both pages after the fixes (3 + 3 evals, run 12 and run 13). In the all-bugs eval the keywords matched all 7 reported titles to the right bug (checked by eye).
+3. **`limit-off-by-one` is the weak spot** (1 of 4). To report it the agent must build an order of 11, and most runs end before that. This is a guess: the eval summaries do not show why a run ended.
+4. **The token budget still ends most runs** (5 of 6 eval runs, plus run 13), at 84,000 to 92,000 tokens. Input is about 92% of the tokens (run 11, run 13), because every step sends all old page snapshots again.
+5. **Run 12 shows a new failure:** the model can stop early and name a wrong reason. One example; the eval will show how often it happens (a run ending on `done` with few steps).
+6. **The guard warned in 6 of these 8 runs and stopped none.** The usual cause is a batch of "Add visitor" clicks without refilling the age field.
+
+**Candidates for the next step, each its own pull request, measured with the eval against these numbers:**
+
+- trimming old page snapshots from the conversation (the biggest lever, because input is 92% of the cost; more steps for the same budget may also help `limit-off-by-one`);
+- a prompt line against stopping early and against batches of clicks without refilling the age field;
+- the reply length limit and hidden thinking (10 of 13 replies in each of runs 11 and 13 had a thinking block).
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
