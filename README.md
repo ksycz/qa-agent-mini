@@ -18,6 +18,15 @@ how many bugs it finds, how many false alarms it raises, and how many steps, tok
 The agent decides what to test next. Our code does everything else: it runs the browser, blocks unsafe actions,
 enforces limits on steps and cost, and records what happened.
 
+## Why a custom agent, and not Playwright Test Agents?
+
+Playwright ships ready-made agents (the planner, generator and healer set up with `npx playwright init-agents`).
+They are a good choice when you want to get working tests quickly. We deliberately do not use them here.
+
+The goal of this repo is to understand how an agent is built: the tools, the loop, the limits, the safety checks and the eval.
+A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
+This is a learning project, not a replacement for the Playwright agents.
+
 **Where we are:** the page, the tools and the agent loop exist and are tested with a fake model. The real model comes in step 4 (see the roadmap below).
 
 
