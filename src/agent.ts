@@ -10,6 +10,7 @@
 
 import type { LlmClient, Message, ToolResultBlock, ToolUseBlock } from './llm';
 import { TOOL_DEFS, runTool, type Issue, type ToolContext } from './tools';
+import type { Trace } from './trace';
 
 // The hard limits. All of them are checked by our code, not requested politely in the prompt.
 export type AgentLimits = {
@@ -48,9 +49,13 @@ export async function runAgent(args: {
   task: string; // what to do right now
   limits?: Partial<AgentLimits>; // override some of the default limits
   log?: (line: string) => void; // optional: print what happens (used by the demo)
+  trace?: Trace; // optional: record every event to a file (see src/trace.ts)
 }): Promise<AgentResult> {
-  const { llm, tools, system, task, log } = args;
+  const { llm, tools, system, task, log, trace } = args;
   const limits = { ...DEFAULT_LIMITS, ...args.limits };
+
+  // First line of the trace: what the agent was given. This answers "what was it told?" when debugging.
+  trace?.event('start', { system, task, limits });
 
   // The conversation so far. It starts with the task and grows with every step.
   const messages: Message[] = [{ role: 'user', content: task }];
@@ -67,6 +72,7 @@ export async function runAgent(args: {
 
   // Small helper: build the result when we stop, for whatever reason.
   const finish = (stopReason: StopReason): AgentResult => {
+    trace?.event('stop', { stopReason, steps, inputTokens, outputTokens, issues: tools.issues.length });
     log?.(`STOP: ${stopReason} after ${steps} step(s), tokens in/out: ${inputTokens}/${outputTokens}`);
     return { issues: tools.issues, steps, inputTokens, outputTokens, stopReason, finalText };
   };
@@ -79,6 +85,9 @@ export async function runAgent(args: {
     const reply = await llm.complete({ system, tools: TOOL_DEFS, messages, maxTokens: limits.maxTokensPerReply });
     inputTokens += reply.usage.inputTokens;
     outputTokens += reply.usage.outputTokens;
+
+    // Write the model's whole answer and its token usage to the trace.
+    trace?.event('model_reply', { step: steps, usage: reply.usage, content: reply.content });
 
     // Remember the text part of the answer, and find the tool requests in it.
     finalText = reply.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');
@@ -111,6 +120,7 @@ export async function runAgent(args: {
         // Cut very long results so they do not eat the token budget.
         const content = out.length > limits.maxToolResultChars ? out.slice(0, limits.maxToolResultChars) : out;
         results.push({ type: 'tool_result', tool_use_id: call.id, content });
+        trace?.event('tool_call', { step: steps, name: call.name, input: call.input, result: content.slice(0, 500) });
         log?.(`         result: ${content.split('\n')[0]}${content.includes('\n') ? ' ...' : ''}`);
       } catch (e) {
         // A tool failed (blocked host, missing element, bad arguments...).
@@ -118,6 +128,7 @@ export async function runAgent(args: {
         // The model can read it and try something else. This is how agents recover.
         const content = `ERROR: ${e instanceof Error ? e.message : String(e)}`;
         results.push({ type: 'tool_result', tool_use_id: call.id, content, is_error: true });
+        trace?.event('tool_error', { step: steps, name: call.name, input: call.input, error: content });
         log?.(`         ${content.split('\n')[0]}`);
       }
     }

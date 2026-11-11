@@ -48,3 +48,47 @@ export type LlmResponse = {
 export interface LlmClient {
   complete(request: LlmRequest): Promise<LlmResponse>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE REAL MODEL (added in step 4). This is the ONLY place in the repo that talks to the Anthropic API.
+// ---------------------------------------------------------------------------------------------
+
+import Anthropic from '@anthropic-ai/sdk';
+
+// Turns the blocks the API sends back into our own, simpler blocks.
+// The API can return other kinds of blocks (for example "thinking"); we keep only text and tool requests.
+// It is a separate function so a unit test can check it without calling the API.
+export function fromAnthropicContent(blocks: ReadonlyArray<{ type: string } & Record<string, unknown>>): Array<TextBlock | ToolUseBlock> {
+  return blocks.flatMap((block): Array<TextBlock | ToolUseBlock> => {
+    if (block.type === 'text') return [{ type: 'text', text: String(block.text) }];
+    if (block.type === 'tool_use') {
+      return [{ type: 'tool_use', id: String(block.id), name: String(block.name), input: block.input as Record<string, unknown> }];
+    }
+    return [];
+  });
+}
+
+// Creates a model client for one model name, for example "claude-haiku-5-5".
+// The API key is NOT passed in code: the SDK reads it from the environment variable ANTHROPIC_API_KEY.
+// That way the key is never written into a file that could be committed.
+export function createAnthropicClient(model: string): LlmClient {
+  const client = new Anthropic();
+  return {
+    async complete({ system, tools, messages, maxTokens }) {
+      // Our request shape is already almost the API's shape, so we pass it on.
+      // (`as never` only silences the type checker about the SDK's very detailed types.)
+      const res = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system,
+        tools: tools as never,
+        messages: messages as never,
+      });
+      return {
+        content: fromAnthropicContent(res.content as never),
+        // These two numbers are what we pay for.
+        usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+      };
+    },
+  };
+}

@@ -27,7 +27,7 @@ If Playwright cannot download its browser, set `QA_AGENT_BROWSER_PATH` to an ins
 ## Rules for the code
 
 - Unit tests must never call a real LLM or need an API key. Use a fake LLM and a fake browser.
-- Only `src/llm.ts` (from step 3) may talk to the Anthropic API.
+- Only `src/llm.ts` (the real client arrived in step 4) may talk to the Anthropic API.
 - Safety rules (allowed hosts, step and token limits) live in code, not only in the prompt.
 - Money is kept in integer cents.
 - The three planted bugs and `SPEC.md` are the ground truth for the eval. If you change one, change the others and the tests.
