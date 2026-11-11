@@ -17,3 +17,13 @@ export function parseBugs(value: string | undefined): string[] {
   if (v === 'all') return ['senior-discount', 'group-threshold', 'limit-off-by-one'];
   return v.split(',').filter(Boolean);
 }
+
+// Reads how many runs the eval should make. Default 3. The maximum is in code, not only in the docs,
+// because every run costs real money (up to 80,000 tokens each).
+export const MAX_EVAL_RUNS = 10;
+export function parseRuns(value: string | undefined): number {
+  if (value === undefined) return 3;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_EVAL_RUNS) throw new Error(`--runs must be a whole number from 1 to ${MAX_EVAL_RUNS}`);
+  return n;
+}

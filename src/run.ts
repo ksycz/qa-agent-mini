@@ -9,15 +9,10 @@
 // to the same agent loop we tested with the fake model. Then we print what the agent found and
 // save the full trace in runs/<time>/trace.jsonl.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { runAgent } from './agent';
-import { launchBrowser } from './browser';
 import { flag, parseBugs } from './cli-args';
-import { createAnthropicClient } from './llm';
-import { loadSpec, SYSTEM_PROMPT, taskFor } from './prompt';
-import { startTarget } from './serve-target';
-import { fileTrace } from './trace';
+import { runOnce } from './run-once';
 
 const bugs = parseBugs(flag('bugs'));
 // The model name can be changed without touching code: QA_AGENT_MODEL=... npm run agent
@@ -33,24 +28,9 @@ if (!process.env.ANTHROPIC_API_KEY) {
 const dir = join('runs', new Date().toISOString().replace(/[:.]/g, '-'));
 mkdirSync(dir, { recursive: true });
 
-const target = await startTarget({ bugs });
-const browser = await launchBrowser();
-
 try {
-  console.log(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   model: ${model}\n`);
-
-  const result = await runAgent({
-    llm: createAnthropicClient(model),
-    // Only the demo page may be opened. This is the safety rule from step 2.
-    tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [] },
-    system: SYSTEM_PROMPT,
-    task: taskFor(target.url, loadSpec()),
-    log: console.log, // print each step as it happens
-    trace: fileTrace(join(dir, 'trace.jsonl')), // and save everything to a file
-    info: { model, bugs }, // the trace says which model and which bugs this run used
-  });
-
-  writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));
+  // The run itself is in src/run-once.ts. Here we only print what it found.
+  const result = await runOnce({ bugs, model, dir, log: console.log });
 
   console.log(`\nIssues reported: ${result.issues.length}`);
   for (const i of result.issues) {
@@ -64,8 +44,4 @@ try {
   if (/authentication|x-api-key|401/i.test(message)) console.error('Check that ANTHROPIC_API_KEY is correct.');
   console.error(`Whatever was recorded before the failure is in ${dir}/trace.jsonl`);
   process.exitCode = 1;
-} finally {
-  // Always clean up, even if something above failed.
-  await browser.close();
-  await target.close();
 }

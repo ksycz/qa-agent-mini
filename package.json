@@ -13,7 +13,8 @@
     "target": "tsx src/serve-target.ts",
     "hands": "tsx src/hands.ts",
     "loop": "tsx src/loop-demo.ts",
-    "agent": "tsx src/run.ts"
+    "agent": "tsx src/run.ts",
+    "eval": "tsx src/eval.ts"
   },
   "license": "MIT",
   "dependencies": {

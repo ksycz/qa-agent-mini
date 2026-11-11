@@ -1,0 +1,50 @@
+// ONE RUN of the agent against the demo page: start the page, open a browser, run the agent loop, save the trace.
+//
+// It lives in its own file because two commands need it:
+//   npm run agent   (src/run.ts)   one run, printed step by step
+//   npm run eval    (src/eval.ts)  several runs in a row, scored (step 6)
+// Both save the same files in the folder they are given: trace.jsonl and result.json.
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { runAgent, type AgentResult } from './agent';
+import { launchBrowser } from './browser';
+import { createAnthropicClient } from './llm';
+import { loadSpec, SYSTEM_PROMPT, taskFor } from './prompt';
+import { startTarget } from './serve-target';
+import { fileTrace } from './trace';
+
+export async function runOnce(opts: {
+  bugs: string[]; // which planted bugs the page has (an empty list = a correct page)
+  model: string;
+  dir: string; // the folder for this run's files
+  log?: (line: string) => void; // optional: print each step as it happens
+}): Promise<AgentResult> {
+  const { bugs, model, dir, log } = opts;
+  mkdirSync(dir, { recursive: true });
+
+  const target = await startTarget({ bugs });
+  const browser = await launchBrowser();
+
+  try {
+    log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   model: ${model}\n`);
+
+    const result = await runAgent({
+      llm: createAnthropicClient(model),
+      // Only the demo page may be opened. This is the safety rule from step 2.
+      tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [] },
+      system: SYSTEM_PROMPT,
+      task: taskFor(target.url, loadSpec()),
+      log,
+      trace: fileTrace(join(dir, 'trace.jsonl')), // everything the agent did, saved to a file
+      info: { model, bugs }, // the trace says which model and which bugs this run used
+    });
+
+    writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));
+    return result;
+  } finally {
+    // Always clean up, even if something above failed.
+    await browser.close();
+    await target.close();
+  }
+}
