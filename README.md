@@ -2,6 +2,25 @@
 
 A tiny QA agent, built step by step to learn how agents are made.
 
+## What the agent will do
+
+The agent is a small AI tester. You give it a web page and a written specification (`SPEC.md`). It works like a QA engineer would:
+
+1. It opens the page in a real browser.
+2. It tries things: types a visitor's age, clicks "Add visitor", reads the price on the page.
+3. It works out what the price should be according to the spec, and compares.
+4. When the page does something different from the spec, it reports an issue with the steps, the expected result and the actual result.
+5. When it has tested enough, it stops and writes a short summary.
+
+The page is a ticket price calculator with three bugs planted on purpose. Because we know the bugs, we can measure the agent:
+how many bugs it finds, how many false alarms it raises, and how many steps, tokens and euros a run costs.
+
+The agent decides what to test next. Our code does everything else: it runs the browser, blocks unsafe actions,
+enforces limits on steps and cost, and records what happened.
+
+**Where we are:** the page, the tools and the agent loop exist and are tested with a fake model. The real model comes in step 4 (see the roadmap below).
+
+
 ## How to read this repo
 
 Every file starts with a comment that says what it is for, and the code is commented line by line.
