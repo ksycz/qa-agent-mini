@@ -2,6 +2,21 @@
 
 A tiny QA agent, built step by step to learn how agents are made.
 
+## How to read this repo
+
+Every file starts with a comment that says what it is for, and the code is commented line by line.
+Read the files in this order:
+
+1. `SPEC.md`: what the page should do.
+2. `target/pricing.mjs`: the rules, and where the three bugs are planted.
+3. `target/index.html`: the page (the script at the bottom is the logic).
+4. `src/serve-target.ts`: the small server that shows the page.
+5. `test/pricing.test.ts`: how the rules are tested.
+6. `src/browser.ts`: the browser, as the agent sees it (five actions).
+7. `src/tools.ts`: the tools and the safety checks around them.
+8. `src/hands.ts`: the tools used by hand. Run it and compare the output with the code.
+9. `test/tools.test.ts` and `test/browser.e2e.test.ts`: tests with a fake and with a real browser.
+
 ## Roadmap
 
 Each step is a small pull request, so the history reads like a tutorial.
