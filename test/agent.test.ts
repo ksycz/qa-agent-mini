@@ -169,6 +169,36 @@ describe('agent loop', () => {
     ]);
   });
 
+  it('writes facts about the run and why each reply ended to the trace (issue #17)', async () => {
+    const trace = memoryTrace();
+    await runAgent({
+      llm: scriptedLlm([toolCall('snapshot', {}), say('end')]),
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      system: 'system',
+      task: 'task',
+      trace,
+      info: { model: 'fake-model', bugs: ['senior-discount'] },
+    });
+    expect(trace.events[0].data.run).toEqual({ model: 'fake-model', bugs: ['senior-discount'] });
+    const replies = trace.events.filter((e) => e.type === 'model_reply');
+    expect(replies.map((e) => e.data.stopReason)).toEqual(['tool_use', 'end_turn']);
+    expect(replies.map((e) => e.data.blockTypes)).toEqual([['tool_use'], ['text']]);
+  });
+
+  it('prints a message when a reply was cut off, and does not change what the loop does', async () => {
+    const lines: string[] = [];
+    const cutOff = { ...say('done?'), stopReason: 'max_tokens' };
+    const r = await runAgent({
+      llm: scriptedLlm([cutOff]),
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      system: 'system',
+      task: 'task',
+      log: (l) => lines.push(l),
+    });
+    expect(lines.some((l) => l.includes('cut off'))).toBe(true);
+    expect(r.stopReason).toBe('done'); // unchanged for now: treating a cut-off reply differently is issue #18
+  });
+
   it('keeps the whole tool result in the trace, not a shortened copy', async () => {
     const trace = memoryTrace();
     const longPage = 'x'.repeat(2000); // longer than the 500 characters the trace used to keep

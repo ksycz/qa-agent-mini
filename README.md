@@ -95,6 +95,17 @@ npm run typecheck && npm test      # the new tests are in test/agent.test.ts and
 
 Nothing here was run against the real model yet. The effect on the agent is measured in the next step with a new baseline (v3), see [RESULTS.md](RESULTS.md).
 
+### Afterwards: what the trace now records (issue #17)
+
+Reading the four runs of baseline v3 showed that the trace lacked facts we needed. Nothing about how the agent behaves changed, only what is written down:
+
+- First line (`start`): a `run` object with the model name and the list of switched-on bugs.
+- Every `model_reply` line: `stopReason` (why the model stopped writing: `end_turn`, `tool_use`, or `max_tokens` = cut off by our length limit) and `blockTypes`
+  (the type of every block the API returned, also the ones we drop, such as `thinking`, because they still use output tokens).
+- The terminal prints a line when a reply was cut off.
+
+The loop does not act on `stopReason` yet. That is issue #18. Because behavior is the same, runs from before and after this change can be compared.
+
 ## Step 4: the first real run
 
 The loop from step 3 stays exactly the same. We replace the fake model with a real one and give it a task.

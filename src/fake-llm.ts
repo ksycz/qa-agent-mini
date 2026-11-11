@@ -8,7 +8,12 @@ import type { LlmClient, LlmRequest, LlmResponse } from './llm';
 // Builds a model answer that asks for one tool. Example: toolCall('fill', { label: 'Visitor age', text: '65' })
 // Every call costs a pretend 100 input and 10 output tokens, so token budgets can be tested.
 export function toolCall(name: string, input: Record<string, unknown>, id = `call_${Math.random().toString(36).slice(2, 8)}`): LlmResponse {
-  return { content: [{ type: 'tool_use', id, name, input }], usage: { inputTokens: 100, outputTokens: 10 } };
+  return {
+    content: [{ type: 'tool_use', id, name, input }],
+    usage: { inputTokens: 100, outputTokens: 10 },
+    stopReason: 'tool_use', // like the real API, so the trace of a test looks like the trace of a real run
+    blockTypes: ['tool_use'],
+  };
 }
 
 // Builds a model answer that asks for SEVERAL tools in one reply (real models do this often).
@@ -17,12 +22,19 @@ export function toolCalls(calls: [string, Record<string, unknown>][]): LlmRespon
   return {
     content: calls.map(([name, input], i) => ({ type: 'tool_use' as const, id: `batch_${i}_${Math.random().toString(36).slice(2, 8)}`, name, input })),
     usage: { inputTokens: 100, outputTokens: 10 },
+    stopReason: 'tool_use',
+    blockTypes: calls.map(() => 'tool_use'),
   };
 }
 
 // Builds a model answer with only text and no tool request. This is how a model says "I am finished".
 export function say(text: string): LlmResponse {
-  return { content: [{ type: 'text', text }], usage: { inputTokens: 100, outputTokens: 10 } };
+  return {
+    content: [{ type: 'text', text }],
+    usage: { inputTokens: 100, outputTokens: 10 },
+    stopReason: 'end_turn',
+    blockTypes: ['text'],
+  };
 }
 
 // A fake model that returns the answers from `script` in order.

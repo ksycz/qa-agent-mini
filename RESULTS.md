@@ -243,6 +243,8 @@ Three runs are a small sample, so these are rough numbers, not rates.
 4. **The token budget ends most runs** (3 of 4), with tests still planned.
 5. **A repeated mistake:** a batch of "Add visitor" clicks without refilling the age field (runs 7, 8 and 10). Each time it costs one step of about 7,300 to 8,500 tokens.
 
+**Note:** traces written after the change for issue #17 contain the model, the bugs, the stop reason and the block types of every reply. Runs 7 to 10 do not, so those facts are assumptions or inferences above.
+
 **Candidates for the next steps, each its own pull request, measured against these four runs:**
 
 - issue #17: record the model, the bugs and why each reply ended (no change in behavior, so it keeps runs comparable, and it checks the guess in point 3);
