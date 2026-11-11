@@ -253,6 +253,38 @@ Three runs are a small sample, so these are rough numbers, not rates.
 - a prompt or tool-description line saying that the age field is cleared after each add;
 - trimming old snapshots, to make the token budget last longer.
 
+### Run 11 (the first run with diagnostics, all three bugs)
+
+An extra sample taken after the change for issue #17 (PR #19). The agent code behaves exactly as in baseline v3, so this run is comparable with runs 7 to 9.
+The trace (`results/run-11-trace.jsonl`) now says what the earlier ones only let us guess: model `claude-haiku-5-5`, bugs `senior-discount`, `group-threshold`, `limit-off-by-one`.
+
+**Result:** 13 steps, 85,421 input and 7,495 output tokens, stopped on the token budget, 1 issue reported (`senior-discount`). 0 false alarms.
+The guard warned once (step 10, a batch of identical "Add visitor" clicks, 9,949 tokens in that one step) and stopped nothing.
+
+**What the new fields showed**
+
+1. **Cut-off replies are real.** Step 5 ended with `stopReason: max_tokens` at exactly 1,000 output tokens, and its last call was `click` with no arguments
+   (the argument check refused it: `Missing argument "role"`). The guess from runs 7 to 10 is now a fact.
+2. **Hidden "thinking" blocks exist.** 10 of 13 replies contained one. Our code drops it (`fromAnthropicContent` keeps only text and tool calls), but it still counts as output tokens.
+   Replies without one cost about 55 output tokens per tool call. Replies with one cost about 200 to 450 tokens more than their visible content would need (steps 3, 7, 10, 11 and 12).
+   This is an estimate from the trace, not a measurement: the text of the hidden block is not recorded.
+3. **A correct report was thrown away by the token budget.** After step 12 the total was 79,656 tokens (limit 80,000). Step 13 was a complete reply that included a correct `report_issue` for `group-threshold`
+   and brought the total to 92,916. The budget check runs right after the model reply, before its tools run, so the run stopped and that report never reached the list (issues: 1, not 2).
+   Running the tools costs no tokens, so this loss is not needed. Tracked as issue #20.
+4. **Input is the cost.** 85,421 of 92,916 tokens (92%) are input: every step sends the whole conversation, including all earlier page snapshots, again.
+
+| | Run 7 | Run 8 | Run 9 | Run 11 |
+|---|---|---|---|---|
+| Reported | 2 of 3 | 2 of 3 | 1 of 3 | 1 of 3 (a 2nd was lost to the budget check) |
+| Steps | 13 | 14 | 9 | 13 |
+| Tokens (in + out) | 91,076 | 90,901 | 53,823 | 92,916 |
+| Guard warnings / stops | 1 / 0 | 1 / 0 | 0 / 0 | 1 / 0 |
+| Replies cut at 1,000 tokens | 1 | 1 | 3 | 1 |
+| Stopped because | token budget | token budget | `done` (empty reply) | token budget |
+
+**Candidates after this run** (each its own pull request): run the tools of the last reply before the budget stop (issue #20); issue #18 (a cut-off reply is not `done`, and its half call is not run);
+the size of `maxTokensPerReply` and the hidden thinking; trimming old snapshots (the largest lever, because input is 92% of the cost).
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
