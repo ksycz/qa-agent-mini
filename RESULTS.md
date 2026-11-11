@@ -20,8 +20,11 @@ How to read the table:
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
 and a stop on the token budget both times. The token counts differ by about 1% (88,728 and 87,763).
-The agent is not random here: the miss and the budget problem are systematic, so they come from the prompt and the design, not from luck.
-Two runs are still a small sample. The eval in step 6 will repeat runs automatically.
+Correction after run 3: this paragraph first said the miss was systematic and caused by the prompt. Run 3 shows that is too strong.
+On the correct page the agent did test the limit (see run 3). So the agent can test the 11th ticket, but whether it does depends on the order
+in which it happens to test things. Runs 1 and 2 happened to give the same result. The budget problem is systematic (all three runs hit it);
+the missed limit bug is more likely a matter of coverage that varies from run to run. Three runs are a small sample:
+the eval in step 6 repeats runs automatically.
 
 ## Summary of run 3 (correct page)
 
@@ -36,8 +39,8 @@ on the correct page 0 false alarms, 13 steps and about 88,700 tokens.
 
 **Missed:** `limit-off-by-one` (an 11th ticket can be added). The agent never tried to add an 11th ticket.
 
-**Why it was missed:** the system prompt suggests testing 7, 8 and 10 tickets but never 11. The agent did what the prompt said.
-The limit can only be tested by trying to go one over it.
+**Why it was missed:** the agent never added an 11th ticket in this run. The system prompt suggests testing 7, 8 and 10 tickets but does not mention 11,
+which may have contributed. The limit can only be tested by trying to go one over it. Run 3 shows the agent does sometimes try it, so the prompt is not the only reason.
 
 **Why the token budget ran out:** every step sends the whole conversation again, including all earlier page snapshots.
 A snapshot grows with every visitor added, so each step costs more than the one before. The limit from step 3 stopped the run as designed.
@@ -62,11 +65,11 @@ Tracked as issue #9 (planned for step 5).
 
 **Reported:** nothing. This is the right answer for a page without bugs.
 
-**Probably tried an 11th ticket without meaning to:** before the first reload (steps 2 to 8) the output shows 11 clicks on "Add visitor"
-(ages 0, 5, 6, 17, 18, 64, 65, then 30 four times). The limit is 10, so the 11th click should have been refused with "Maximum 10 tickets per order.".
-The output does not show the page text (snapshots are printed as `- main: ...`), so this is not confirmed. Check in the trace:
-`grep "Maximum" runs/<run folder>/trace.jsonl`. If the message is there, the agent saw the limit work on the correct page by accident.
-On the buggy page it never reached 11 tickets in one order, because it reloaded the page and started over.
+**Tested the limit, and knew it (confirmed in the trace):** before the first reload the agent added 11 visitors (ages 0, 5, 6, 17, 18, 64, 65, then 30 four times).
+The snapshot at step 8 shows `alert: Maximum 10 tickets per order.`, and the model wrote "Maximum check passes." in its next reply.
+It then reloaded the page on purpose: "the 10-ticket limit would mask those results" (a full order hides the validation tests).
+So on this run the limit test happened, on the correct page. On the buggy page in runs 1 and 2 the agent never built an order beyond 8 tickets in one go.
+Reloads are the agent's way of emptying the order, because the page has no "clear order" button.
 
 **The same kind of mistake again (step 11):** `click` without `name`, refused with `ERROR: Missing or empty argument "name"`, corrected at step 12.
 It happened in runs 1 and 3, and a missing `text` in `fill` in run 2 (issue #9). In all three the model had just asked for many `fill` and `click` calls in one reply.
@@ -79,6 +82,8 @@ So the model drops an argument from time to time, and the quality of the tool er
 3. Cost: prompt caching for the part that repeats (system prompt, spec, tools).
 4. Efficiency: a smaller snapshot, or fewer snapshots per step.
 5. Tools: check required arguments against the tool schema, so a missing argument is an error the model can read.
-6. Prompt: tell the agent that a reload is expensive and that the order is empty only after a reload.
+6. Prompt: tell the agent that a reload is expensive and that the order is empty only after a reload. Or remove the reason for reloading: a "Clear order" button on the page, or a `reset` tool.
+7. Trace: `tool_call` events keep only the first 500 characters of a tool result, so long snapshots are cut (the ticket list above was cut in the middle). Store the whole result in the trace, it is the main debugging tool.
+8. Measurement: because coverage differs between runs, judge every change by at least 3 runs, not one. This is what the eval in step 6 automates.
 
 Change one thing per run, so the table shows what helped.
