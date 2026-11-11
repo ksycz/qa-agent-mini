@@ -54,6 +54,7 @@ Read the files in this order:
 16. `src/trace.ts`: the written record of a run.
 17. `src/run.ts`: the first real run. The only file that starts everything together.
 18. `src/llm.ts` again, the bottom part: the one place that calls the Anthropic API.
+19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored.
 
 ## Roadmap
 
@@ -66,7 +67,7 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 5: guardrails.** A smarter stuck guard (same call + same result + same page, with a warning before the stop) and a check of required tool arguments against the tool schema. Fixes issues #12 and #9.
 - [x] **Step 5a: seeing and fixing what the runs showed** (pull requests after step 5, no new feature). Baseline v2 and v3 in `RESULTS.md` (runs 4 to 10), the trace records the model, the bugs and why each reply ended (issue #17),
   and the loop handles cut-off replies and runs the tools of the last reply before the budget stop (issues #18 and #20).
-- [ ] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens, cost. Repeat runs, because LLMs vary. Next, because by hand we only get one sample per change.
+- [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
 - [ ] **Step 6b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling. Measured with the eval, so it comes after it.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
@@ -119,6 +120,26 @@ Runs 7 to 11 showed two losses inside the loop. This time the behavior of the ag
 - **The tools of the last reply run before the budget stop (#20).** The token check now sits at the end of the round, before the next model call. Running a tool costs no tokens, only the next model call does,
   so a `report_issue` in the reply that crosses the budget is no longer thrown away.
 - Not changed here: the size of `maxTokensPerReply`, hidden "thinking" blocks, the prompt. Each of those is its own change.
+
+## Step 6: the eval
+
+A model does not do the same thing twice, so one run proves little (run 9 used 54,000 tokens, run 11 over 90,000). The eval repeats the run and counts.
+
+```bash
+export ANTHROPIC_API_KEY=your-key
+npm run eval -- --bugs=all --runs=3     # the page has three bugs
+npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a false alarm
+```
+
+- `src/run-once.ts`: one run (start the page, open the browser, run the agent, save the trace). `npm run agent` and `npm run eval` both use it.
+- `src/score.ts`: scoring. A bug counts as **found** when the agent reported it with `report_issue`. We read only the title of the report, with one simple keyword rule per bug (`BUG_MATCHERS`).
+  A report that fits no switched-on bug is a **false alarm**. The same file counts replies cut off by the length limit and stuck-guard warnings in the trace.
+- `src/eval.ts`: the loop over the runs. It prints a table and saves it in `evals/<time>/summary.md`, with the trace of every run next to it (`run-1/`, `run-2/`, ...). The folder is ignored by git.
+- The summary prints the title of every reported issue with the bug the keywords gave it. Keywords are crude (an LLM judge is on the roadmap, step 9), so look at the titles when a number surprises you.
+- Cost: every run can use up to 80,000 tokens. The default is 3 runs and the maximum 10 is in the code (`MAX_EVAL_RUNS`). Before it starts, the eval prints the most it can use.
+- If you change a planted bug or `SPEC.md`, change `BUG_MATCHERS` too (the test checks that every bug has a rule).
+
+The unit tests (`test/score.test.ts`) use real report titles from our runs 7 to 11. Nothing in the tests calls a model.
 
 ## Step 4: the first real run
 
