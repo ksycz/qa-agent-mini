@@ -109,7 +109,7 @@ Rows are filled in as the runs come in, one pull request for the whole baseline.
 |---|---|---|---|---|---|---|---|---|---|---|
 | [7](results/run-07-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed, see run 7) | all 3 bugs | 2 of 3 | 0 | 13 | 84,139 / 6,937 | 0 | 10 | token budget (80,000) |
 | [8](results/run-08-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | all 3 bugs (assumed) | 2 of 3 | 0 | 14 | 84,061 / 6,840 | 0 | 10 | token budget (80,000) |
-| 9 | | | all 3 bugs | | | | | | | |
+| [9](results/run-09-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | all 3 bugs (assumed) | 1 of 3 (2 more seen, not reported) | 0 | 9 | 47,961 / 5,862 | 0 | 11 | `done`, but the last reply was empty (see run 9) |
 | 10 | | | no bugs | n/a | | | | | | |
 
 ### Run 7 (baseline v3, first run)
@@ -163,6 +163,45 @@ So we cannot say that one more step would have been enough.
 
 **Runs 7 and 8 together:** 2 of 3 bugs both times, 0 false alarms, 0 reloads, 13 and 14 steps, about 91,000 tokens, stop on the token budget. The guard warned once in each run and never stopped a run.
 Both runs were ended by the budget before the limit was tested. Run 9 and the run without bugs (10) are still to come.
+
+### Run 9 (baseline v3, third run)
+
+Again only the trace (`results/run-09-trace.jsonl`); model name and bug list are assumptions, as in runs 7 and 8.
+
+**Reported 1 of 3:** `senior-discount` (step 8). **False alarms:** 0. **Reloads:** 0 ("Clear order" was not used at all). 9 steps, 47,961 / 5,862 tokens. The largest order had 11 tickets.
+"Found" in this document means "reported with `report_issue`". By that count this is the worst run of baseline v3, but the page showed all three bugs to the agent:
+
+- **`group-threshold`:** at step 5 the order had 8 tickets with no discount (total €90.00). In step 6 the model wrote "the prices look undiscounted", added a 9th and a 10th ticket and saw the 10% appear. It never reported the missing discount at 8.
+- **`limit-off-by-one`:** at step 7 the model added an 11th ticket and the page accepted it with no message (total €135.00). In step 8 it wrote "the 11th ticket was also accepted with no limit message" and called `report_issue` twice.
+  The first call (senior price) worked. The second arrived with no arguments (`{}`), and the argument check refused it (`Missing argument "title"`). The limit bug was never reported.
+  (It reached the 11th ticket almost by accident: the age field still held "30" from the cut-off step 6, so a bare click on "Add visitor" added it.)
+
+**The run ended on `done`, and that is wrong.** Step 9 used 1,000 output tokens (`maxTokensPerReply`) but its content is empty: no text and no tool call. The loop reads "no tool requested" as "the model is finished",
+so it stopped with `done` after 9 steps. The model never said it was finished. Without this, the run had 16 steps and about 30,000 tokens of budget left.
+Our code does not look at why a reply ended (`src/llm.ts` ignores the API's stop reason), so it cannot tell "finished" from "cut off".
+
+**Cut-off replies: now clear enough to call it the main problem of baseline v3.** Across runs 7, 8 and 9, every reply that used exactly 1,000 output tokens ended in an incomplete call or in nothing
+(run 7 step 9; run 8 step 14; run 9 steps 6, 8 and 9). That is five replies out of five. The trace does not record the stop reason, so this is still an inference, not a proof.
+There is a second clue: many replies use far more output tokens than their visible content needs (run 9, step 7: 982 tokens for about 45 words and two short calls).
+`fromAnthropicContent` in `src/llm.ts` drops every block that is not text or a tool call (for example "thinking" blocks), so such blocks, if the model produces any, use up the 1,000 tokens and we never see them.
+That is a guess too. Both guesses can be checked cheaply by writing the stop reason and the types of all returned blocks into the trace.
+
+**The guard did not fire at all in this run** (no `WARNING` in the trace): the model did not send a batch of identical clicks.
+
+**Runs 7, 8 and 9 together (page with 3 bugs):**
+
+| | Run 7 | Run 8 | Run 9 |
+|---|---|---|---|
+| Reported | 2 of 3 | 2 of 3 | 1 of 3 |
+| Seen on the page | 3 of 3 (11th ticket asked for, not run) | 2 of 3 | 3 of 3 |
+| Steps | 13 | 14 | 9 |
+| Tokens (in + out) | 91,076 | 90,901 | 53,823 |
+| Replies cut at 1,000 tokens | 1 | 1 | 3 |
+| Stopped because | token budget | token budget | `done` (empty reply) |
+
+What we can say with three runs: the stuck guard no longer decides the outcome (it warned in two runs and stopped none), and the agent now tests all the areas.
+What decides the outcome now is what happens inside a reply: replies are cut off, calls arrive without arguments, and one run ended by mistake.
+Run 10 (page without bugs) is still to come. Fixing the cut-off replies is a new change and gets its own pull request, measured against these runs.
 
 ## Summary of runs 1 and 2
 
