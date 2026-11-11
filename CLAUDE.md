@@ -31,6 +31,7 @@ If Playwright cannot download its browser, set `QA_AGENT_BROWSER_PATH` to an ins
 - Safety rules (allowed hosts, step and token limits) live in code, not only in the prompt.
 - Money is kept in integer cents.
 - The three planted bugs and `SPEC.md` are the ground truth for the eval. If you change one, change the others and the tests.
+- `runs/` and `evals/` stay on the local machine (gitignored). Commit to `results/` only the summaries and traces that `RESULTS.md` cites as a measurement, and check them for secrets first (API key, local paths, e-mail).
 - In `target/index.html`, never write the placeholder name for the bug list inside a comment: the server replaces only its first occurrence.
 
 ## Before saying a step is done

@@ -138,6 +138,7 @@ npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a
 - `src/eval.ts`: the loop over the runs. It prints a table and saves it in `evals/<time>/summary.md`, with the trace of every run next to it (`run-1/`, `run-2/`, ...). The folder is ignored by git.
 - The summary prints the title of every reported issue with the bug the keywords gave it. Keywords are crude (an LLM judge is on the roadmap, step 9), so look at the titles when a number surprises you.
 - Cost: every run can use up to 80,000 tokens. The default is 3 runs and the maximum 10 is in the code (`MAX_EVAL_RUNS`). Before it starts, the eval prints the most it can use.
+- Keep the files in Git small: `evals/` is ignored. Only the summaries and traces that `RESULTS.md` cites go to `results/`, after a check for secrets.
 - If you change a planted bug or `SPEC.md`, change `BUG_MATCHERS` too (the test checks that every bug has a rule).
 
 The unit tests (`test/score.test.ts`) use real report titles from our runs 7 to 11. Nothing in the tests calls a model.
