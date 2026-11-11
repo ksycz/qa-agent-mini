@@ -11,6 +11,7 @@
 import type { LlmClient, Message, ToolResultBlock, ToolUseBlock } from './llm';
 import { TOOL_DEFS, runTool, type Issue, type ToolContext } from './tools';
 import { createStuckGuard, STUCK_WARNING } from './stuck-guard';
+import { trimOldSnapshots } from './trim-snapshots';
 import type { Trace } from './trace';
 
 // The text of the page right now. The stuck guard compares it before and after a call to see if anything changed.
@@ -96,8 +97,9 @@ export async function runAgent(args: {
   while (steps < limits.maxSteps) {
     steps++;
 
-    // 1. Ask the model what to do next. It sees the whole conversation so far.
-    const reply = await llm.complete({ system, tools: TOOL_DEFS, messages, maxTokens: limits.maxTokensPerReply });
+    // 1. Ask the model what to do next. It sees the whole conversation so far, except that old page snapshots are
+    // replaced by a short note (src/trim-snapshots.ts), because every old snapshot would be paid for again in every step.
+    const reply = await llm.complete({ system, tools: TOOL_DEFS, messages: trimOldSnapshots(messages), maxTokens: limits.maxTokensPerReply });
     inputTokens += reply.usage.inputTokens;
     outputTokens += reply.usage.outputTokens;
 

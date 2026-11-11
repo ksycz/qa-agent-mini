@@ -338,6 +338,24 @@ On the page without bugs: 0 false alarms in 3 eval runs (all stopped on the toke
 - a prompt line against stopping early and against batches of clicks without refilling the age field;
 - the reply length limit and hidden thinking (10 of 13 replies in each of runs 11 and 13 had a thinking block).
 
+## Step 6c: trimming old snapshots, the plan (written before the runs)
+
+**The change:** the model sees only the newest page snapshot in full. Older snapshot results are replaced by a short note (`src/trim-snapshots.ts`). Everything else is as in baseline v4.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `npm run eval -- --bugs=none --runs=3`, compared with baseline v4. Baseline v4 for reference:
+all bugs: senior 3 of 3, group 3 of 3, limit 1 of 3, 0 false alarms, 12.7 steps and 83,368 tokens per run (about 6,600 tokens per step), 2 of 3 runs ended on the token budget;
+no bugs: 0 false alarms, 12.3 steps and 89,620 tokens per run (about 7,300 tokens per step), 3 of 3 runs ended on the token budget.
+Three runs is a small sample, so only a clear difference counts.
+
+**Our estimate of the saving** (from the traces of runs 11 and 13, a rough calculation, not a measurement): old snapshots are about 10,000 tokens of the 83,000 to 85,000 input tokens of such a run, maybe up to 20,000.
+
+**Guesses (written before measuring):**
+
+1. The runs get more steps for the same budget: 14 to 17 steps per run instead of 12.7. Fewer runs end on the token budget.
+2. `limit-off-by-one` is found more often (2 of 3 or better), because more runs reach an order of 11. This is the weakest part of the guess: it assumes that running out of budget is what stops the agent before the limit test.
+3. `senior-discount` and `group-threshold` stay at 3 of 3 (2 of 3 would still not worry us). False alarms stay at 0.
+4. A possible harm: without old snapshots the model may call `snapshot` more often, or compare worse with what it saw earlier. If bugs found go down or tokens per run do not go down, we drop the change.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

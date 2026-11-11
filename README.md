@@ -68,10 +68,11 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 5a: seeing and fixing what the runs showed** (pull requests after step 5, no new feature). Baseline v2 and v3 in `RESULTS.md` (runs 4 to 10), the trace records the model, the bugs and why each reply ended (issue #17),
   and the loop handles cut-off replies and runs the tools of the last reply before the budget stop (issues #18 and #20).
 - [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
+- [ ] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees only the newest page snapshot in full, so every step sends fewer input tokens. Built (see "Step 6c" below); it stays only if the eval shows it does not hurt (plan and guesses in `RESULTS.md`).
 - [ ] **Step 6b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling. Measured with the eval, so it comes after it.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: trimming old page snapshots (input is about 92% of the tokens), a prompt line against stopping early and against batches of clicks without refilling the age field,
+- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against stopping early and against batches of clicks without refilling the age field,
   the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -140,6 +141,18 @@ npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a
 - If you change a planted bug or `SPEC.md`, change `BUG_MATCHERS` too (the test checks that every bug has a rule).
 
 The unit tests (`test/score.test.ts`) use real report titles from our runs 7 to 11. Nothing in the tests calls a model.
+
+## Step 6c: trimming old page snapshots
+
+Every step sends the whole conversation to the model again, and input is about 92% of all tokens (runs 11 and 13). Old page snapshots are part of that: by our estimate from two traces they are roughly 10 to 20% of the input.
+The model only needs the page as it is now, and the newest snapshot shows that.
+
+- `src/trim-snapshots.ts`: `trimOldSnapshots(messages)` returns a copy of the conversation in which every `snapshot` result except the newest is replaced by a short note
+  (`older page snapshot removed to save tokens; call snapshot to see the page`). Errors and the results of other tools stay. Our own list of messages is not changed.
+- `src/agent.ts`: sends the trimmed copy to the model in every step. Nothing else in the loop changed.
+- Where the tokens go (runs 11 and 13): about 29% is the fixed part sent again in every step (system prompt, specification, tool list), the rest grows with the conversation, and about half of that is the model's own replies (batches of 10 to 12 tool calls).
+  Old snapshots are the part this step removes. The fixed part is what prompt caching would address (step 9).
+- This is a change of behavior, so it is measured: `npm run eval` with and without bugs, compared with baseline v4. Guesses written before the runs are in `RESULTS.md`.
 
 ## Step 4: the first real run
 
