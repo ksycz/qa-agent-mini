@@ -108,7 +108,7 @@ Rows are filled in as the runs come in, one pull request for the whole baseline.
 | Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Largest order | Stopped because |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [7](results/run-07-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed, see run 7) | all 3 bugs | 2 of 3 | 0 | 13 | 84,139 / 6,937 | 0 | 10 | token budget (80,000) |
-| 8 | | | all 3 bugs | | | | | | | |
+| [8](results/run-08-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | all 3 bugs (assumed) | 2 of 3 | 0 | 14 | 84,061 / 6,840 | 0 | 10 | token budget (80,000) |
 | 9 | | | all 3 bugs | | | | | | | |
 | 10 | | | no bugs | n/a | | | | | | |
 
@@ -128,7 +128,7 @@ In runs 4 to 6 the old guard ended the run in this kind of situation. We cannot 
 **The run reached what runs 4 to 6 could not:** an order of 8 tickets (all €20.00, no discount: the planted bug, found) and an order of 10 tickets (all €18.00).
 
 **Why `limit-off-by-one` was missed:** the model did ask for the 11th ticket in step 13, but the token budget is checked before the tools of a reply are run, so that step never ran.
-Steps 8 to 10, where the model lost its way with the batch, cost about 27,300 tokens. The token budget is now what ends the runs, as in runs 1 to 3.
+The broken batch of eight clicks (step 8) produced one ticket and cost 8,036 tokens (input and output of that step); steps 9 and 10 repeated the work properly. The token budget is now what ends the runs, as in runs 1 to 3.
 
 **A cut-off reply, probably.** Step 9 used exactly 1,000 output tokens, which is `maxTokensPerReply`, and its last call, `click`, arrived with no arguments (`{}`).
 The new argument check refused it with a readable message (`Missing argument "role"`), and the model corrected itself in step 10. That the reply was cut by the limit is a guess: the trace does not say why a reply ended.
@@ -138,6 +138,31 @@ If it is true, it would also explain the forgotten arguments in runs 1 to 3 (man
 (4) no false alarms on the page without bugs: not measured yet (run 10).
 
 One run is an anecdote. The next runs show whether the budget again ends the run before the 11th ticket.
+
+### Run 8 (baseline v3, second run)
+
+Again only the trace (`results/run-08-trace.jsonl`). The trace stores neither the model name nor the list of switched-on bugs, so "claude-haiku-5-5" and "all 3 bugs" are assumptions:
+the plan says nothing was changed, and the two bugs found are planted ones.
+
+**Found 2 of 3:** `senior-discount` (step 8) and `group-threshold` (step 13). **Missed:** `limit-off-by-one`. **False alarms:** 0. **Reloads:** 0.
+14 steps, 84,061 / 6,840 tokens, stopped on the token budget. The largest order had 10 tickets.
+
+**Almost the same story as run 7**, with different details:
+
+- The senior bug was found at step 8 (run 7: step 6). The model also saw that age 120 costs €15.00, and treated it as the same bug instead of reporting it twice.
+- The group discount: 8 adults at €20.00 each (reported), then 10 adults at €18.00 each. The model noticed that "the discount seems to start at 9 tickets, not 8" and planned to confirm that on a fresh order in step 14.
+- **The same mistake as in run 7:** a batch of eight "Add visitor" clicks without refilling the age (step 10). The field is empty after each add, so only one ticket was added, and the guard warned at click 4 and did not stop the run.
+  That step cost 8,461 tokens. The model understood the cause from the page ("the age field clears after each add") and refilled the field before each add in the next steps.
+  Two runs out of two make the same mistake, so it is not a one-off. An idea for later: tell the agent in the prompt or in the `fill` description that the field is cleared after each add.
+
+**A cut-off reply again.** Step 14 used exactly 1,000 output tokens (`maxTokensPerReply`) and its last call is `fill` with no `text` (`{"label":"Visitor age"}`). This time the budget stop came first, so the new argument check never saw it.
+Together with run 7 (step 9: exactly 1,000 tokens, last call `click` with `{}`) this is two out of two. It strongly points to replies being cut off by the limit, but the trace still does not record why a reply ended, so it remains a hypothesis.
+
+**`limit-off-by-one` again not tested, and again because of the budget.** Unlike run 7, the model was not about to try the 11th ticket in this run: its next planned step was to confirm the threshold of 8 against 9.
+So we cannot say that one more step would have been enough.
+
+**Runs 7 and 8 together:** 2 of 3 bugs both times, 0 false alarms, 0 reloads, 13 and 14 steps, about 91,000 tokens, stop on the token budget. The guard warned once in each run and never stopped a run.
+Both runs were ended by the budget before the limit was tested. Run 9 and the run without bugs (10) are still to come.
 
 ## Summary of runs 1 and 2
 
