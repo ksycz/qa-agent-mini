@@ -356,6 +356,37 @@ Three runs is a small sample, so only a clear difference counts.
 3. `senior-discount` and `group-threshold` stay at 3 of 3 (2 of 3 would still not worry us). False alarms stay at 0.
 4. A possible harm: without old snapshots the model may call `snapshot` more often, or compare worse with what it saw earlier. If bugs found go down or tokens per run do not go down, we drop the change.
 
+## Step 6c: trimming old snapshots, the result
+
+Measured with the eval, 3 runs per page: `results/eval-trim-all-summary.md` and `results/eval-trim-none-summary.md`. As for baseline v4, only the summaries were kept, not the traces,
+so we cannot see what the model wrote in its last replies or whether it called `snapshot` more often.
+
+| | Baseline v4 | After trimming |
+|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 3 / 1 of 3 | 3 / 3 / 0 of 3 |
+| All bugs: false alarms | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 12.7, 83,368 | 12.3, 63,224 |
+| All bugs: tokens per step (mean of the runs) | about 6,580 | about 5,000 |
+| All bugs: runs ended on the token budget / on `done` | 2 / 1 | 0 / 3 |
+| No bugs: false alarms | 0 | 0 |
+| No bugs: steps, tokens per run (mean) | 12.3, 89,620 | 13.3, 75,487 |
+| No bugs: tokens per step (mean of the runs) | about 7,280 | about 5,590 |
+| No bugs: runs ended on the token budget / on `done` | 3 / 0 | 2 / 1 |
+
+**The guesses from the plan, one by one**
+
+1. *14 to 17 steps per run:* **wrong.** 12.3 steps with bugs, 13.3 without. Fewer runs end on the token budget (0 of 3 and 2 of 3, against 2 of 3 and 3 of 3), but they do not use the saved tokens for more steps.
+2. *`limit-off-by-one` found in 2 of 3 or better:* **wrong.** 0 of 3. The weak part of the guess turned out wrong: all three runs with bugs ended on `done` with 0 to 44,000 tokens left (run 2: 9 steps, 36,077 tokens), and still no report about the limit.
+   So the token budget was not what stopped the agent before the limit test. What stops it is that the model decides itself that it is finished, which is also what we saw in run 12. We do not know what it wrote in these last replies.
+3. *Senior and group stay at 3 of 3, no false alarms:* **true** (senior 3 of 3, group 3 of 3, 0 false alarms in 6 runs).
+4. *Harm check (bugs found down or tokens not down: drop the change):* tokens went down clearly, about 24% per step on both pages. Bugs found per run went from 2, 2, 3 to 2, 2, 2: one report fewer in total (the limit bug, 1 of 3 to 0 of 3). The plan said that only a clear difference counts,
+   and one report in three runs is not one, so the rule does not tell us to drop the change. We keep it. What we could not check: whether the model calls `snapshot` more often (no traces).
+
+**What it says:** removing old snapshots makes every step cheaper (about 24%), as estimated, without a visible loss in bugs found. It does not make the agent test more. The limiting factor is now that the agent ends its run early, with budget left.
+Three runs per page is a small sample.
+
+**Next candidate:** a prompt line against stopping early (do not finish before every area of the specification, including the limit of 10 tickets, is tested). Better to look first at the last replies of a few runs. For that the traces of the evals are needed.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
