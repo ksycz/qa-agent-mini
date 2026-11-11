@@ -48,6 +48,7 @@ and the model corrected the call at step 10. The loop did not crash.
 but our code treats a missing `text` as an empty string (this is on purpose for clearing a field), so the call "succeeded" and cleared the field.
 In run 1 the same kind of mistake (`click` without `name`) was caught, because that argument is checked. Lesson: a tool should check its input
 against its own schema, and decide deliberately which arguments may be empty.
+Tracked as issue #9 (planned for step 5).
 
 **Ideas to try next, one at a time (not done yet):**
 
