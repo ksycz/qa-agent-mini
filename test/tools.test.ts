@@ -45,10 +45,21 @@ describe('runTool', () => {
     expect(out).toBe('x'.repeat(20) + '\n[truncated]'); // limit is 20 in this test
   });
   it('rejects missing arguments', async () => {
-    // For fill, an empty text is allowed (it clears a field), so this succeeds.
-    await expect(runTool(ctx(), 'fill', { label: 'Visitor age' })).resolves.toBe('Filled.');
-    // For click, the name is required.
+    // click: the name is required.
     await expect(runTool(ctx(), 'click', { role: 'button' })).rejects.toThrow(/name/);
+    // Issue #9: fill without `text` used to succeed and silently clear the field. Now it is an error.
+    const log: string[] = [];
+    await expect(runTool(ctx({}, log), 'fill', { label: 'Visitor age' })).rejects.toThrow(/text/);
+    expect(log).toEqual([]); // the browser was never asked
+  });
+  it('still allows an empty text in fill, because that clears a field', async () => {
+    const log: string[] = [];
+    await expect(runTool(ctx({}, log), 'fill', { label: 'Visitor age', text: '' })).resolves.toBe('Filled.');
+    expect(log).toEqual(['fill Visitor age=']);
+  });
+  it('rejects an empty value where text is required, and values that are not text', async () => {
+    await expect(runTool(ctx(), 'click', { role: 'button', name: '  ' })).rejects.toThrow(/Empty argument "name"/);
+    await expect(runTool(ctx(), 'fill', { label: 'Visitor age', text: 65 })).rejects.toThrow(/text/); // a number is not text
   });
   it('rejects unknown tools', async () => {
     await expect(runTool(ctx(), 'delete_everything', {})).rejects.toThrow(/Unknown tool/);
@@ -63,8 +74,11 @@ describe('runTool', () => {
   // Safety net: if someone adds a tool to the menu but forgets to write its code, this test fails.
   it('every tool definition has a handler', async () => {
     for (const t of TOOL_DEFS) {
-      // Empty input may fail on a missing argument, but never with "Unknown tool".
-      await runTool(ctx(), t.name, {}).catch((e: Error) => expect(e.message).not.toMatch(/Unknown tool/));
+      // Fill every required argument with text, so the input passes the check against the schema.
+      // The call may still fail (for example "x" is not a URL), but never with "Unknown tool".
+      const required = (t.input_schema.required ?? []) as string[];
+      const input = Object.fromEntries(required.map((k) => [k, 'x']));
+      await runTool(ctx(), t.name, input).catch((e: Error) => expect(e.message).not.toMatch(/Unknown tool/));
     }
   });
 });
