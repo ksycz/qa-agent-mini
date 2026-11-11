@@ -8,6 +8,7 @@ A tiny QA agent, built step by step to learn how agents are made. Every step mus
 - Go slowly. If something is not obvious, explain it, do not add more code.
 - Every file starts with a comment saying what it is for. Comment non-obvious lines in plain, simple English.
 - Everything in the repo (code, comments, README, PRs, commits) is in English. Talk to the owner in Czech.
+- The full procedure for a step is the project skill `.claude/skills/qa-agent-mini-step/SKILL.md`.
 - Pull request description always has four parts: what changed, what problem it solves, how to test it locally, what the risk is.
 
 ## Commands
