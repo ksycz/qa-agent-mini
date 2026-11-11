@@ -96,6 +96,10 @@ What to look at after a run:
 
 Runs are not identical. Run it three times and write down what changed. Try `QA_AGENT_MODEL=<another model> npm run agent`.
 
+Results of real runs, with what we changed and learned, are logged in [RESULTS.md](RESULTS.md).
+
+After every `git pull` that changes `package.json`, run `npm install` again, otherwise new packages are missing.
+
 The first version of the prompt is a first guess. Improving it, and measuring whether the change helped, is what steps 5 and 6 are for.
 
 ## Step 3: the brain and the loop (fake brain, real hands)
