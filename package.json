@@ -4,13 +4,19 @@
   "private": true,
   "type": "module",
   "description": "A very small QA agent built step by step.",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "target": "tsx src/serve-target.ts"
+    "target": "tsx src/serve-target.ts",
+    "hands": "tsx src/hands.ts"
   },
   "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.65.0"
+  },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "tsx": "^4.23.15",

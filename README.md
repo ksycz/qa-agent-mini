@@ -7,7 +7,7 @@ A tiny QA agent, built step by step to learn how agents are made.
 Each step is a small pull request, so the history reads like a tutorial.
 
 - [x] **Step 1: the thing to test.** A page with planted bugs, a written spec and unit tests. No AI yet.
-- [ ] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
+- [x] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
 - [ ] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
 - [ ] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
 - [ ] **Step 5: guardrails and safety.** Prompt-injection canary on the page, tool errors returned to the model, API key handling.
@@ -16,6 +16,25 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [ ] **Step 8: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
+
+## Step 2: the hands (still no AI)
+
+An agent is a model that decides which tool to call. Before adding the model, we build the tools and prove they work on their own.
+
+- `src/browser.ts`: a tiny browser interface (open, snapshot, click, fill) on top of Playwright. The page is shown to the agent
+  as a text tree of roles and names (an ARIA snapshot), which is much cheaper than a screenshot.
+- `src/tools.ts`: the five tools the agent will get (`open_page`, `snapshot`, `click`, `fill`, `report_issue`), their descriptions,
+  and the checks around them. The allowed-hosts check lives here, in code, not in a prompt. Long results are cut off.
+- `src/hands.ts`: a script that calls the tools one by one, like the agent will, including calls that must fail.
+- `test/tools.test.ts`: unit tests with a fake browser. `test/browser.e2e.test.ts` uses a real browser (`E2E=1 npm test`).
+
+```bash
+npm install
+npx playwright install chromium     # once; or set QA_AGENT_BROWSER_PATH to an installed Chrome
+npm run hands
+```
+
+Read the output. Notice that errors come back as plain text. In step 3 the model will receive them the same way and can react.
 
 ## Step 1: the thing to test (no AI yet)
 
