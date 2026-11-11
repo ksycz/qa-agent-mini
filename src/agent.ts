@@ -61,12 +61,13 @@ export async function runAgent(args: {
   limits?: Partial<AgentLimits>; // override some of the default limits
   log?: (line: string) => void; // optional: print what happens (used by the demo)
   trace?: Trace; // optional: record every event to a file (see src/trace.ts)
+  info?: Record<string, unknown>; // optional: facts about this run for the trace (for example the model and the bugs)
 }): Promise<AgentResult> {
-  const { llm, tools, system, task, log, trace } = args;
+  const { llm, tools, system, task, log, trace, info } = args;
   const limits = { ...DEFAULT_LIMITS, ...args.limits };
 
   // First line of the trace: what the agent was given. This answers "what was it told?" when debugging.
-  trace?.event('start', { system, task, limits });
+  trace?.event('start', { run: info, system, task, limits }); // `run` = who and what (model, bugs); the rest = what the agent was told
 
   // The conversation so far. It starts with the task and grows with every step.
   const messages: Message[] = [{ role: 'user', content: task }];
@@ -97,7 +98,16 @@ export async function runAgent(args: {
     outputTokens += reply.usage.outputTokens;
 
     // Write the model's whole answer and its token usage to the trace.
-    trace?.event('model_reply', { step: steps, usage: reply.usage, content: reply.content });
+    // stopReason and blockTypes say WHY the answer ended and what the API really returned (also blocks we drop).
+    trace?.event('model_reply', {
+      step: steps,
+      usage: reply.usage,
+      stopReason: reply.stopReason,
+      blockTypes: reply.blockTypes,
+      content: reply.content,
+    });
+    // Only a message on the screen, nothing else changes: a cut-off answer may end with an incomplete tool call.
+    if (reply.stopReason === 'max_tokens') log?.(`step ${steps}: the reply was cut off by the length limit (max_tokens)`);
 
     // Remember the text part of the answer, and find the tool requests in it.
     finalText = reply.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');

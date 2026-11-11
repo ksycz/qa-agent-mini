@@ -42,6 +42,13 @@ export type LlmRequest = {
 export type LlmResponse = {
   content: Array<TextBlock | ToolUseBlock>;
   usage: { inputTokens: number; outputTokens: number };
+  // For the trace only: why did the model stop writing? The API says it, for example
+  //   'end_turn' (it finished), 'tool_use' (it asked for tools) or 'max_tokens' (it was CUT OFF by our length limit).
+  // The loop does not act on it yet. It is written to the trace so we can see cut-off answers (issue #17).
+  stopReason?: string | null;
+  // For the trace only: the type of EVERY block the API returned, in order, including the blocks we drop
+  // (for example 'thinking'). Dropped blocks still use up output tokens, so we want to know they exist.
+  blockTypes?: string[];
 };
 
 // The contract: anything with this one function can be the agent's brain.
@@ -68,6 +75,22 @@ export function fromAnthropicContent(blocks: ReadonlyArray<{ type: string } & Re
   });
 }
 
+// Turns a whole API answer into our LlmResponse. Pure function (no network), so a unit test can check it.
+// `res` has the shape of the API answer, but we only describe the few fields we read.
+export function fromAnthropicResponse(res: {
+  content: ReadonlyArray<{ type: string } & Record<string, unknown>>;
+  stop_reason: string | null;
+  usage: { input_tokens: number; output_tokens: number };
+}): LlmResponse {
+  return {
+    content: fromAnthropicContent(res.content),
+    // These two numbers are what we pay for.
+    usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+    stopReason: res.stop_reason,
+    blockTypes: res.content.map((b) => b.type), // all of them, also the ones fromAnthropicContent drops
+  };
+}
+
 // Creates a model client for one model name, for example "claude-haiku-5-5".
 // The API key is NOT passed in code: the SDK reads it from the environment variable ANTHROPIC_API_KEY.
 // That way the key is never written into a file that could be committed.
@@ -84,11 +107,7 @@ export function createAnthropicClient(model: string): LlmClient {
         tools: tools as never,
         messages: messages as never,
       });
-      return {
-        content: fromAnthropicContent(res.content as never),
-        // These two numbers are what we pay for.
-        usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
-      };
+      return fromAnthropicResponse(res as never);
     },
   };
 }

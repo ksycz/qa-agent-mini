@@ -47,6 +47,7 @@ try {
     task: taskFor(target.url, loadSpec()),
     log: console.log, // print each step as it happens
     trace: fileTrace(join(dir, 'trace.jsonl')), // and save everything to a file
+    info: { model, bugs }, // the trace says which model and which bugs this run used
   });
 
   writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));
