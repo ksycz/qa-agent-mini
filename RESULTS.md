@@ -65,6 +65,53 @@ The guard (issue #12) ends every run in the same place, before the limit (10 tic
 Run 6 adds one open question: an order of 8 tickets was built, but the group discount was not reported. It is not yet clear if that is a coverage problem or a reading problem.
 Better plan: fix issue #12 (and #9), then measure a baseline v3 with 3 runs.
 
+## Baseline v3: the plan (written before the runs)
+
+**What changed since baseline v2:** step 5 (PR #14). The stuck guard now means "same call, same result, same page", and the model gets a warning before a stop (issue #12).
+A call without a required argument is an error (issue #9). The page and the prompt are the same as in baseline v2, and so is the model (`claude-haiku-5-5`).
+Baseline v3 is the first baseline that is not cut short by the guard, so it is the one later changes are compared with.
+
+**What we run: 4 runs, nothing changed between them.**
+
+| Runs | Command | Page | Why |
+|---|---|---|---|
+| 7, 8, 9 | `npm run agent -- --bugs=all` | all 3 bugs | Does the agent find the bugs, and how much does that vary? |
+| 10 | `npm run agent -- --bugs=none` | no bugs | Does the agent invent problems (false alarms) on the new page? |
+
+**Why several runs, and why 3.** The model answers a little differently every time, so one run is an anecdote.
+Runs 1 and 2 were almost identical, run 3 differed, and in baseline v2 only run 6 reached an order of 8 tickets.
+Three runs show a first impression of what is typical and how much it varies. That is not statistics: three runs cannot prove that a change helped.
+Step 6 repeats runs automatically and counts, so we can use many more. Until then, three is what we can afford by hand (each run takes a few minutes and about 30,000 to 90,000 tokens).
+
+**Why one run without bugs.** False alarms were measured only on the old page (run 3: none). The page changed since, so we check once more.
+One run is only a first signal. If it reports something, we look at the trace and repeat it before we believe it.
+
+**What we measure in every run** (the same columns as in baseline v2): bugs found out of 3, false alarms, steps, tokens in and out, reloads, and why the run stopped.
+Two more things we read from the trace in `runs/`, because they answer the questions left open by baseline v2:
+
+- Did the stuck guard still end the run? Search the trace for `WARNING` (the model was warned) and look at how the model reacted.
+- How many tickets did the biggest order have? The group discount starts at 8 tickets and the limit is 10, so we need to know whether the agent got there,
+  and if it did, whether it read the total and noticed the missing discount.
+
+**What we expect (guesses, written down before we see the results, so we cannot fool ourselves later):**
+
+1. Runs end on `done` or on the token budget, not on `repeated_call` at step 8 or 9.
+2. More steps and more tokens per run than in baseline v2 (30,000 to 36,000 input tokens), because the runs are no longer cut short.
+3. At least some runs reach 8 or even 10 tickets, so they have a chance to find `group-threshold` and `limit-off-by-one`.
+4. 0 false alarms on the page without bugs.
+
+If a guess turns out wrong, that is a result too. We write what happened, not what we hoped for.
+
+**How to record a run:** copy the terminal output into `results/run-NN-output.txt`, add a row to the table below, and write a short section about it.
+Rows are filled in as the runs come in, one pull request for the whole baseline.
+
+| Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Largest order | Stopped because |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 7 | | | all 3 bugs | | | | | | | |
+| 8 | | | all 3 bugs | | | | | | | |
+| 9 | | | all 3 bugs | | | | | | | |
+| 10 | | | no bugs | n/a | | | | | | |
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
