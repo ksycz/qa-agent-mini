@@ -403,6 +403,23 @@ All the reports it did make are correct, so the false alarms stayed at 0, but th
 **What we do next:** fix the trimming first (keep all snapshots of the latest round), measure again, and only then work on the prompt against early stopping (one change at a time).
 
 
+## Step 6c, fixed: keep all snapshots of the latest round (the plan, written before the runs)
+
+**The change:** `trimOldSnapshots` keeps in full all snapshot results of the latest round (the results of the model's last reply), and replaces only those of older rounds. Before, it kept only the single newest snapshot of the whole conversation,
+so the model never saw the earlier snapshots of a reply with several snapshots (about 10% of snapshots). Everything else is as after 6c.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, with the traces saved this time, compared with baseline v4 and with 6c (trimming as first built). For reference:
+tokens per step: baseline v4 about 6,580 (all) and 7,280 (none); 6c about 5,000 and 5,590. Steps with 2 or more snapshots (3 runs together): baseline v4 3 (all) and 12 (none); 6c 3 and 3.
+Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. Tokens per step stay clearly below baseline v4 (about 20 to 24% lower), a little above 6c, because about 10% of the snapshots come back.
+2. The model takes several snapshots in one step again: on the page without bugs, steps with 2 or more snapshots go back toward the baseline v4 level (more than 3 over 3 runs).
+3. In the last replies, there are no complaints about removed snapshots and no withdrawn claims.
+4. Senior and group stay at 3 of 3, false alarms at 0.
+5. `limit-off-by-one` does not improve (0 or 1 of 3), because the cause is the early stop and not the snapshots. That is for the prompt step that follows.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

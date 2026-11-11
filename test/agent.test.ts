@@ -250,13 +250,20 @@ describe('agent loop', () => {
     expect(r.issues).toHaveLength(1); // the report from the last reply was kept
   });
 
-  // OLD PAGE SNAPSHOTS (src/trim-snapshots.ts): the model sees only the newest one, to save input tokens.
-  it('shows the model only the newest page snapshot', async () => {
-    const llm = scriptedLlm([toolCall('snapshot', { n: 1 }), toolCall('snapshot', { n: 2 }), say('done')]);
+  // OLD PAGE SNAPSHOTS (src/trim-snapshots.ts): the model sees the snapshots of the latest round, and older ones as a short note.
+  it('shows the model all snapshots of the latest round and replaces older ones', async () => {
+    const llm = scriptedLlm([
+      toolCalls([['snapshot', { n: 1 }], ['snapshot', { n: 2 }]]), // round 1: two snapshots in one reply
+      toolCall('snapshot', { n: 3 }), // round 2: one snapshot
+      say('done'),
+    ]);
     await run(llm);
-    const third = JSON.stringify(llm.requests[2].messages); // the request that follows two snapshots
-    expect(third.split('Add visitor').length - 1).toBe(1); // the fake page text appears once: the newest snapshot
-    expect(third).toContain('older page snapshot removed');
+    const second = JSON.stringify(llm.requests[1].messages); // after round 1
+    expect(second.split('Add visitor').length - 1).toBe(2); // both snapshots of round 1: the model has not read them yet
+    expect(second).not.toContain('older page snapshot removed');
+    const third = JSON.stringify(llm.requests[2].messages); // after round 2
+    expect(third.split('Add visitor').length - 1).toBe(1); // only the snapshot of round 2 is whole
+    expect(third.split('older page snapshot removed').length - 1).toBe(2); // the two of round 1 are notes now
   });
 
   it('keeps the whole tool result in the trace, not a shortened copy', async () => {

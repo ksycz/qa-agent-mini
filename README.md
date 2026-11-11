@@ -68,7 +68,7 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 5a: seeing and fixing what the runs showed** (pull requests after step 5, no new feature). Baseline v2 and v3 in `RESULTS.md` (runs 4 to 10), the trace records the model, the bugs and why each reply ended (issue #17),
   and the loop handles cut-off replies and runs the tools of the last reply before the budget stop (issues #18 and #20).
 - [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
-- [x] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees only the newest page snapshot in full, so every step sends fewer input tokens. Measured: about 24% fewer tokens per step, no clear loss in bugs found, but no more bugs found either, and the traces showed a flaw (the model does not see the earlier snapshots of the same reply). A fix is next (plan, guesses and result in `RESULTS.md`).
+- [x] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees in full only the snapshots of the latest round (the results of its last reply), so every step sends fewer input tokens. Measured: about 24% fewer tokens per step, no clear loss in bugs found, but no more bugs found either, and the traces showed a flaw (the model does not see the earlier snapshots of the same reply). The fix (keep all snapshots of the latest round, not only the single newest one) is in the section "Step 6c, fixed" in `RESULTS.md`, which also has the plan and the guesses.
 - [ ] **Step 6b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling. Measured with the eval, so it comes after it.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
@@ -145,10 +145,11 @@ The unit tests (`test/score.test.ts`) use real report titles from our runs 7 to 
 ## Step 6c: trimming old page snapshots
 
 Every step sends the whole conversation to the model again, and input is about 92% of all tokens (runs 11 and 13). Old page snapshots are part of that: by our estimate from two traces they are roughly 10 to 20% of the input.
-The model only needs the page as it is now, and the newest snapshot shows that.
+The model only needs the page as it is now, and the snapshots of its latest round show that.
 
-- `src/trim-snapshots.ts`: `trimOldSnapshots(messages)` returns a copy of the conversation in which every `snapshot` result except the newest is replaced by a short note
+- `src/trim-snapshots.ts`: `trimOldSnapshots(messages)` returns a copy of the conversation in which every `snapshot` result of an older round is replaced by a short note
   (`older page snapshot removed to save tokens; call snapshot to see the page`). Errors and the results of other tools stay. Our own list of messages is not changed.
+  A round is the results of one reply of the model. The first version kept only the single newest snapshot, which hid the earlier snapshots of the same reply from the model (found in the traces of the first eval, see `RESULTS.md`).
 - `src/agent.ts`: sends the trimmed copy to the model in every step. Nothing else in the loop changed.
 - Where the tokens go (runs 11 and 13): about 29% is the fixed part sent again in every step (system prompt, specification, tool list), the rest grows with the conversation, and about half of that is the model's own replies (batches of 10 to 12 tool calls).
   Old snapshots are the part this step removes. The fixed part is what prompt caching would address (step 9).
