@@ -110,7 +110,7 @@ Rows are filled in as the runs come in, one pull request for the whole baseline.
 | [7](results/run-07-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed, see run 7) | all 3 bugs | 2 of 3 | 0 | 13 | 84,139 / 6,937 | 0 | 10 | token budget (80,000) |
 | [8](results/run-08-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | all 3 bugs (assumed) | 2 of 3 | 0 | 14 | 84,061 / 6,840 | 0 | 10 | token budget (80,000) |
 | [9](results/run-09-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | all 3 bugs (assumed) | 1 of 3 (2 more seen, not reported) | 0 | 9 | 47,961 / 5,862 | 0 | 11 | `done`, but the last reply was empty (see run 9) |
-| 10 | | | no bugs | n/a | | | | | | |
+| [10](results/run-10-trace.jsonl) | 2026-11-11 | claude-haiku-5-5 (assumed) | no bugs (assumed) | n/a | 0 | 13 | 76,508 / 6,227 | 0 | 10 | token budget (80,000) |
 
 ### Run 7 (baseline v3, first run)
 
@@ -202,6 +202,54 @@ That is a guess too. Both guesses can be checked cheaply by writing the stop rea
 What we can say with three runs: the stuck guard no longer decides the outcome (it warned in two runs and stopped none), and the agent now tests all the areas.
 What decides the outcome now is what happens inside a reply: replies are cut off, calls arrive without arguments, and one run ended by mistake.
 Run 10 (page without bugs) is still to come. Fixing the cut-off replies is a new change and gets its own pull request, measured against these runs.
+
+### Run 10 (baseline v3, page without bugs)
+
+Again only the trace (`results/run-10-trace.jsonl`); model name and bug list (none) are assumptions, but every price and message on the page matches `SPEC.md`, so the page was the correct one.
+
+**Reported nothing: 0 false alarms.** That is the right answer. The agent checked 30, 65, 5, 6, 17, 18, 64, 120, 121, -1 and 12.5 and compared every one with the specification,
+then 7, 8 and 10 adults (€140.00, €144.00 with €18.00 each, and the message "Maximum 10 tickets per order.") and read the 11th ticket as refused.
+13 steps, 76,508 / 6,227 tokens, stopped on the token budget. 0 reloads. Largest order: 10 tickets.
+
+**The same pattern as in runs 7 and 8:** at step 8 the model sent seven "Add visitor" clicks without refilling the age field (one ticket added, 7,311 tokens for that step), the guard warned at click 4 and did not stop the run,
+and the model corrected itself in step 9.
+
+**Two replies cut off at exactly 1,000 output tokens.** Step 9 ended with `click` without `name` (the argument check refused it, the model repeated the work in step 10).
+Step 13 ended with `fill` with no arguments, and the budget stop came first. The model had just written a good test plan in that reply:
+a mixed order of 8 (one aged 12, one aged 65, one aged 3, five adults), expected total €9 + €9 + €0 + 5 × €18 = €108.00. That test never ran.
+
+## Baseline v3: the result
+
+| | Run 7 | Run 8 | Run 9 | Run 10 (no bugs) |
+|---|---|---|---|---|
+| Reported | 2 of 3 | 2 of 3 | 1 of 3 | n/a |
+| False alarms | 0 | 0 | 0 | 0 |
+| Steps | 13 | 14 | 9 | 13 |
+| Tokens (in + out) | 91,076 | 90,901 | 53,823 | 82,735 |
+| Largest order | 10 | 10 | 11 | 10 |
+| Guard warnings / stops | 1 / 0 | 1 / 0 | 0 / 0 | 1 / 0 |
+| Replies cut at 1,000 tokens | 1 | 1 | 3 | 2 |
+| Stopped because | token budget | token budget | `done` (empty reply) | token budget |
+
+**By bug, over the three runs with bugs:** `senior-discount` reported 3 of 3, `group-threshold` 2 of 3, `limit-off-by-one` 0 of 3 (in run 9 the agent saw it and the report was lost in a cut-off reply).
+Three runs are a small sample, so these are rough numbers, not rates.
+
+**What baseline v3 says**
+
+1. **The stuck guard is fixed.** It warned in 3 of 4 runs and stopped none. The runs now reach orders of 8 and 10 tickets. The first three guesses in the plan came true (no `repeated_call`, more steps and tokens than v2, orders of 8 and 10 reached).
+2. **No false alarms** in 4 runs: all 5 reported issues are planted bugs, and on the page without bugs the agent reported nothing (the fourth guess, from a single run).
+3. **Cut-off replies are the main loss.** Every reply with exactly 1,000 output tokens (7 of 7, across runs 7 to 10) ended in an incomplete last call or in nothing, and none of the shorter replies had an incomplete call.
+   They cost a lost report (run 9), a wrong `done` (run 9), and the last planned test of runs 8 and 10. The cause (the 1,000-token limit, or hidden blocks that use up tokens) is still a guess: the trace does not record why a reply ended (issue #17).
+4. **The token budget ends most runs** (3 of 4), with tests still planned.
+5. **A repeated mistake:** a batch of "Add visitor" clicks without refilling the age field (runs 7, 8 and 10). Each time it costs one step of about 7,300 to 8,500 tokens.
+
+**Candidates for the next steps, each its own pull request, measured against these four runs:**
+
+- issue #17: record the model, the bugs and why each reply ended (no change in behavior, so it keeps runs comparable, and it checks the guess in point 3);
+- issue #18: a cut-off reply must not count as `done` or run as a half call;
+- the size of `maxTokensPerReply`, and a prompt line asking for shorter replies and smaller batches;
+- a prompt or tool-description line saying that the age field is cleared after each add;
+- trimming old snapshots, to make the token budget last longer.
 
 ## Summary of runs 1 and 2
 
