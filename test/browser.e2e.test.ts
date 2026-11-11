@@ -10,6 +10,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
 import { startTarget } from '../src/serve-target';
+import { runTool, type ToolContext } from '../src/tools';
 
 // describe.skipIf: run this group only when the environment variable E2E is set.
 describe.skipIf(!process.env.E2E)('browser e2e', () => {
@@ -42,5 +43,19 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     const page = await browser.snapshot();
     expect(page).toContain('Total: €0.00');
     expect(page).not.toContain('Visitor 1');
+  });
+
+  // Step 6e: the tool on the REAL page. It also proves that the alert line looks the way findAlert expects.
+  it('add_visitors adds 11 visitors and stops at the page message on the 11th (limit is 10)', async () => {
+    const limitTarget = await startTarget({ bugs: [] }); // a page without bugs: the 11th ticket is refused
+    try {
+      await browser.open(limitTarget.url);
+      const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 6000, issues: [] };
+      const out = await runTool(ctx, 'add_visitors', { ages: '30,30,30,30,30,30,30,30,30,30,30' });
+      expect(out).toContain('Stopped after age 30 (11 of 11)');
+      expect(out).toContain('Maximum 10 tickets per order.');
+    } finally {
+      await limitTarget.close();
+    }
   });
 });

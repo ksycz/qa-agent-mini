@@ -518,6 +518,25 @@ all six runs used the new one. "6c fixed" is the baseline for this step.
 **What it says:** the change did not help and mostly hurt: more early endings, fewer tokens used, nothing more found. It is not kept. Next candidates (each its own pull request): revert the budget rule to the old wording (back to "6c fixed", already measured, so no new eval needed),
 and later, as a separate experiment, a rule without any number ("do not stop while an area is untested; the run is stopped automatically if the budget ends"); and a better note for removed snapshots (for example one that says the page was seen before and the model's own notes are in the conversation).
 
+## Step 6e: a tool that adds several visitors in one call (the plan, written before the runs)
+
+**The change:** a sixth tool `add_visitors` (`src/tools.ts`). Given ages such as "30, 65, 8", our code fills the age field and clicks "Add visitor" for each age, reads the page after every click, stops at the first message of the page and returns the snapshot.
+Limits: at most 12 ages per call, whole numbers only. The prompt, the limits, the trimming and the page are as in "6c fixed". The only difference is the new tool in the menu.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, traces kept, compared with "6c fixed", where:
+senior 3 of 3, group 2 of 3, limit 0 of 3 with bugs; 0 false alarms; 14.3 steps per run; about 5,580 tokens per step (with bugs) and 5,840 (without);
+with bugs no run built an order larger than 8; without bugs the first order of 10 at steps 10, 12 and 15; 5 of 6 runs ended on the token budget.
+Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. The model uses `add_visitors` in at least 2 of 3 runs on each page. A risk: the prompt says "after every action call snapshot", so it may still call `snapshot` after each `add_visitors` (we look for that in the traces).
+2. With bugs, at least one run builds an order of 11 tickets (or hits the limit message), and `limit-off-by-one` is found in at least 1 of 3 runs (now 0 of 3).
+3. Steps per run go up (16 or more) because each step is cheaper, but the number of model calls per ticket goes down. Tokens per step stay within 10% of "6c fixed".
+4. Senior and group stay at 2 or 3 of 3, and false alarms stay at 0. Without bugs, the "Maximum 10 tickets per order." message must not be reported as an issue.
+5. A possible harm: the model sends one long list (for example 11 ages) at once and never checks the totals in between, so it misses the senior or group price. We look for it in the traces: how many ages per call, and whether it reads the total after the call.
+6. A possible harm: the stop at the page message hides a second problem after the message. This is fine for the limit message; we look for other messages in the traces.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

@@ -4,11 +4,12 @@
 // It writes something like: "call fill with label=Visitor age and text=65". OUR code then decides
 // whether to do it and how. That is where the safety rules live.
 //
-// This file has four parts:
+// This file has five parts:
 //   1. TOOL_DEFS:      the menu we show to the model (names, descriptions, arguments).
 //   2. ToolContext:    what the tools need to work (the browser, the allowed hosts, ...).
 //   3. assertAllowed:  the allowed-hosts guard.
-//   4. runTool:        the code that actually runs a tool.
+//   4. addVisitors:    the one tool that does several browser actions in a row (step 6e).
+//   5. runTool:        the code that actually runs a tool.
 
 import type { BrowserPort } from './browser';
 
@@ -19,7 +20,7 @@ export type ToolDef = { name: string; description: string; input_schema: Record<
 // A problem the agent found. This is the agent's OUTPUT, the thing we later score.
 export type Issue = { title: string; steps: string; expected: string; actual: string };
 
-// 1. THE MENU. Five tools. Keep descriptions short and concrete.
+// 1. THE MENU. Six tools. Keep descriptions short and concrete.
 export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'open_page',
@@ -48,6 +49,18 @@ export const TOOL_DEFS: ToolDef[] = [
       type: 'object',
       properties: { label: { type: 'string' }, text: { type: 'string' } },
       required: ['label', 'text'],
+    },
+  },
+  {
+    name: 'add_visitors',
+    description:
+      'Add several visitors in one call. For each age it types the age into "Visitor age" and clicks "Add visitor". ' +
+      'Example: ages "30, 65, 8". At most 12 ages per call. It stops when the page shows a message and tells you what it said. ' +
+      'It returns the page snapshot, so you do not need to call snapshot afterwards.',
+    input_schema: {
+      type: 'object',
+      properties: { ages: { type: 'string', description: 'Whole numbers separated by commas, for example "30, 65, 8"' } },
+      required: ['ages'],
     },
   },
   {
@@ -111,7 +124,55 @@ function validateInput(def: ToolDef, input: Record<string, unknown>): void {
   }
 }
 
-// 4. RUN ONE TOOL. Returns text for the model. If something goes wrong it THROWS an error.
+// 4. ADD SEVERAL VISITORS in one tool call (step 6e).
+// Before this tool every ticket cost the model two calls (fill, then click). Now our code does the repeating.
+// The browser work is the same as before, only the model is not asked between the actions.
+
+// A safety limit in code: one call can add at most this many visitors.
+export const MAX_VISITORS_PER_CALL = 12;
+
+// Cuts a long snapshot and says so. Used by the snapshot tool and by add_visitors.
+function cutSnapshot(text: string, maxChars: number): string {
+  return text.length > maxChars ? text.slice(0, maxChars) + '\n[truncated]' : text;
+}
+
+// Looks for the message the page shows in its alert line, for example "Maximum 10 tickets per order."
+// In the snapshot it looks like this:   - alert: Maximum 10 tickets per order.
+// Returns the text, or '' when there is no message.
+function findAlert(snapshot: string): string {
+  const match = /^\s*- alert:\s*(.+)$/m.exec(snapshot);
+  return match ? match[1].trim() : '';
+}
+
+async function addVisitors(ctx: ToolContext, agesText: string): Promise<string> {
+  // Split "30, 65, 8" into pieces and check every piece BEFORE the browser is touched.
+  const pieces = agesText.split(/[\s,;]+/).filter((x) => x !== '');
+  if (pieces.length === 0) throw new Error('No ages given. Example: "30, 65, 8"');
+  if (pieces.length > MAX_VISITORS_PER_CALL) {
+    throw new Error(`Too many ages: ${pieces.length}. Add at most ${MAX_VISITORS_PER_CALL} per call.`);
+  }
+  // Only whole numbers. To try a strange age (for example -5 or abc), use the fill and click tools by hand.
+  const bad = pieces.find((x) => !/^\d{1,3}$/.test(x));
+  if (bad !== undefined) throw new Error(`"${bad}" is not a whole number of up to 3 digits`);
+
+  let added = 0;
+  for (const age of pieces) {
+    await ctx.browser.fill('Visitor age', age);
+    await ctx.browser.click('button', 'Add visitor');
+    added++;
+    // Read the page after EVERY click (this is local and costs no tokens), because the next click would
+    // erase the message. If the page said something, stop and give the message to the model.
+    const message = findAlert(await ctx.browser.snapshot());
+    if (message !== '') {
+      const page = cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
+      return `Stopped after age ${age} (${added} of ${pieces.length}). The page says: ${message}\nThe remaining ages were not added.\n${page}`;
+    }
+  }
+  const page = cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
+  return `Added ${added} of ${pieces.length} visitors.\n${page}`;
+}
+
+// 5. RUN ONE TOOL. Returns text for the model. If something goes wrong it THROWS an error.
 // The agent loop (step 3) catches the error and sends its message back to the model as text,
 // so the model can see what went wrong and try something else. The loop never crashes because of a tool.
 export async function runTool(ctx: ToolContext, name: string, input: Record<string, unknown>): Promise<string> {
@@ -130,9 +191,8 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
       return 'Page opened.';
     }
     case 'snapshot': {
-      const text = await ctx.browser.snapshot();
       // Long pages would cost many tokens, so we cut them and say so.
-      return text.length > ctx.maxSnapshotChars ? text.slice(0, ctx.maxSnapshotChars) + '\n[truncated]' : text;
+      return cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
     }
     case 'click':
       await ctx.browser.click(str('role'), str('name'));
@@ -141,6 +201,8 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
       // `text` must be present, but "" is allowed: it clears the field (see MAY_BE_EMPTY above).
       await ctx.browser.fill(str('label'), str('text'));
       return 'Filled.';
+    case 'add_visitors':
+      return addVisitors(ctx, str('ages'));
     case 'report_issue': {
       // All four fields are required, so a report always has steps, expected and actual results.
       ctx.issues.push({

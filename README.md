@@ -40,7 +40,7 @@ Read the files in this order:
 3. `target/index.html`: the page (the script at the bottom is the logic).
 4. `src/serve-target.ts`: the small server that shows the page.
 5. `test/pricing.test.ts`: how the rules are tested.
-6. `src/browser.ts`: the browser, as the agent sees it (five actions).
+6. `src/browser.ts`: the browser, as the agent sees it (five actions; `add_visitors` is built from them).
 7. `src/tools.ts`: the tools and the safety checks around them.
 8. `src/hands.ts`: the tools used by hand. Run it and compare the output with the code.
 9. `test/tools.test.ts` and `test/browser.e2e.test.ts`: tests with a fake and with a real browser.
@@ -70,10 +70,11 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
 - [x] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees in full only the snapshots of the latest round (the results of its last reply), so every step sends fewer input tokens. Measured: about 24% fewer tokens per step, no clear loss in bugs found, but no more bugs found either, and the traces showed a flaw (the model does not see the earlier snapshots of the same reply). The fix (keep all snapshots of the latest round, not only the single newest one) is in the section "Step 6c, fixed" in `RESULTS.md`, which also has the plan and the guesses.
 - [x] **Step 6d: tried and not kept: a prompt that states the budget.** The model was told it had about 14 steps and 80,000 tokens. It read the number as a target and stopped early in 5 of 6 runs (see `RESULTS.md`), so the change was reverted. What we learned is in the section "Step 6d" below.
+- [ ] **Step 6e: a tool that adds several visitors in one call.** `add_visitors` with ages like "30, 65, 8": our code does the fill and click for each age, so a ticket no longer costs the model two calls. It stops at the first message of the page and returns the snapshot. Built; it stays only if the eval shows it helps (plan and guesses in `RESULTS.md`).
 - [ ] **Step 6b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling. Measured with the eval, so it comes after it.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against batches of clicks without refilling the age field, a prompt line against stopping early without any number in it (the one with numbers was tried in step 6d and made it worse), a better note where an old snapshot was removed,
+- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against batches of clicks without refilling the age field (maybe not needed after step 6e), a prompt line against stopping early without any number in it (the one with numbers was tried in step 6d and made it worse), a better note where an old snapshot was removed,
   the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -165,6 +166,21 @@ We told the model its budget in the system prompt (about 14 steps, 80,000 tokens
 - **Result:** it made things worse. 5 of 6 runs ended on `done` after 9 to 13 steps and said they had run out of the step budget, with 36,000 to 79,000 of 80,000 tokens used (before: 1 of 6). Nothing more was found. The model took "about 14 steps" as a target.
 - **What we kept:** nothing in the code. The prompt is back to the old last rule ("You have a limited number of steps..."), so the agent is as measured in "6c fixed" in `RESULTS.md`. The plan, the guesses and the result of this try stay in `RESULTS.md`.
 - **The lesson:** a number in the prompt is not only information, the model also treats it as an instruction. Safety limits live in code (step 3); telling the model about them can change its behavior in ways we did not intend, so such a change must be measured.
+
+## Step 6e: adding several visitors in one call
+
+After step 6c the agent has about 13 to 15 steps (the token budget ends most runs). A ticket costs two calls (`fill` the age, `click` "Add visitor"), so an order of 11 tickets is more steps than the agent has. It almost never built an order larger than 8, and `limit-off-by-one` (the 11th ticket) was almost never found.
+
+- **New tool `add_visitors`** (`src/tools.ts`): one argument `ages`, for example `"30, 65, 8"`. For each age, our code fills "Visitor age" and clicks "Add visitor". These are the same actions as before; only the model is not asked between them.
+- **It reads the page after every click** (locally, no tokens), because the next click would erase the page's message. At the first message (for example "Maximum 10 tickets per order.") it stops, tells the model how far it got and what the page said, and does not add the rest.
+- **It returns the snapshot**, so the model does not need a separate `snapshot` call afterwards.
+- **Safety in code:** at most 12 ages per call (`MAX_VISITORS_PER_CALL`), whole numbers of up to 3 digits only, all checked before the browser is touched. To try a strange age such as `-5` or `abc`, the agent still uses `fill` and `click`.
+- **The prompt is not changed** (one change at a time). The system prompt still says "after every action call snapshot"; the tool description says it is not needed here. The traces will show which one the model follows.
+
+```bash
+npm run typecheck && npm test      # new tests in test/tools.test.ts (fake browser)
+E2E=1 npm test                     # also adds 11 visitors on the real page and checks the stop
+```
 
 ## Step 4: the first real run
 
