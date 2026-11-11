@@ -420,6 +420,44 @@ Three runs per page is a small sample.
 4. Senior and group stay at 3 of 3, false alarms at 0.
 5. `limit-off-by-one` does not improve (0 or 1 of 3), because the cause is the early stop and not the snapshots. That is for the prompt step that follows.
 
+## Step 6c, fixed: the result
+
+Measured with the eval, 3 runs per page: `results/eval-fix-all-summary.md` and `results/eval-fix-none-summary.md`, traces in `results/eval-traces/fix-all` and `fix-none`.
+"6c" below means trimming as first built (only the single newest snapshot), "fixed" means the version from PR #28 (all snapshots of the latest round).
+
+| | Baseline v4 | 6c | 6c fixed |
+|---|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 3 / 1 of 3 | 3 / 3 / 0 of 3 | 3 / 2 / 0 of 3 |
+| All bugs: false alarms | 0 | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 12.7, 83,368 | 12.3, 63,224 | 14.3, 79,987 |
+| All bugs: tokens per step (mean of the runs) | about 6,580 | about 5,000 | about 5,580 |
+| All bugs: ended on the token budget / on `done` | 2 / 1 | 0 / 3 | 2 / 1 |
+| No bugs: false alarms | 0 | 0 | 0 |
+| No bugs: steps, tokens per run (mean) | 12.3, 89,620 | 13.3, 75,487 | 14.3, 83,121 |
+| No bugs: tokens per step (mean of the runs) | about 7,280 | about 5,590 | about 5,840 |
+| No bugs: ended on the token budget / on `done` | 3 / 0 | 2 / 1 | 3 / 0 |
+| Steps with 2 or more snapshots, all bugs / no bugs (3 runs together) | 3 / 12 | 3 / 3 | 5 / 4 |
+| Snapshots per step, all bugs / no bugs | 0.97 / 1.35 | 0.89 / 1.00 | 0.93 / 1.14 |
+
+**The guesses from the plan, one by one**
+
+1. *Tokens per step stay clearly below baseline v4 (about 20 to 24% lower), a little above 6c:* **partly true.** 15% lower with bugs and 20% lower without, and about 12% and 4% above 6c.
+2. *The model takes several snapshots in one step again (without bugs, more than 3 steps with 2 or more snapshots):* **barely true.** 4 such steps (3 before the fix), but far from the 12 of baseline v4. Snapshots per step moved only a little toward the baseline value.
+3. *No complaints about removed snapshots, no withdrawn claims in the last replies:* **true.** None in the 6 runs (the only `done` ending was run 2 with bugs).
+4. *Senior and group stay at 3 of 3, false alarms 0:* **senior 3 of 3 and false alarms 0 are true, group 2 of 3 is not.** In the run that missed it (run 3) the order never grew past 7 tickets (the group discount starts at 8) and the run ended on the token budget at step 15.
+5. *`limit-off-by-one` does not improve:* **true.** 0 of 3.
+
+**What the traces show about the limit bug.** With bugs, the agent first saw an order of 8 tickets at step 12 or 13 (and in one run never), and in all three runs it never built an order larger than 8. Without bugs it reached 10 tickets at steps 10, 12 and 15.
+The agent tests the ages first and the order sizes last, and the token budget ends most runs (5 of 6) at 13 to 15 steps, so it does not get to the order sizes. Runs ended on `done` early only once in 6 (all-bugs run 2, step 14, wrote "I stopped testing before finishing the planned checks"),
+so the early stop we saw before is now rare, and the main limit is the budget. Another detail: the system prompt gives "order sizes (for example 7, 8, 10 tickets)" and does not name 11. That is a guess about a cause, not shown.
+Each ticket also costs two calls (fill, then click), because the page clears the age field after each add: 22 to 37 "Add visitor" clicks per run.
+
+**What it says:** the fixed trimming gives about 15 to 20% fewer tokens per step than baseline v4 and about 2 more steps per run (14.3 against 12.7 and 12.3), without false alarms and without complaints about missing snapshots. It does not find more bugs (group 2 of 3, limit 0 of 3; with three runs per page those are within the normal variation).
+We keep it. The weakest bug stays weak because the agent runs out of budget before it builds an order of 8 or 11.
+
+**Next candidate:** the agent has about 13 to 15 steps in practice, not 25, and it spends them on ages first. Options, each its own pull request: a prompt that states the real budget and asks to cover every area (order sizes up to one above the limit) before it runs out;
+or a cheaper way to build an order (a tool that adds several visitors in one call), or a larger token budget. Details to decide with the owner.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
