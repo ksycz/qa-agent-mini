@@ -122,4 +122,19 @@ describe('agent loop', () => {
       'start', 'model_reply', 'tool_error', 'model_reply', 'tool_call', 'model_reply', 'stop',
     ]);
   });
+
+  it('keeps the whole tool result in the trace, not a shortened copy', async () => {
+    const trace = memoryTrace();
+    const longPage = 'x'.repeat(2000); // longer than the 500 characters the trace used to keep
+    const browser = { ...fakeBrowser(), snapshot: async () => longPage };
+    await runAgent({
+      llm: scriptedLlm([toolCall('snapshot', {}), say('end')]),
+      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 5000, issues: [] },
+      system: 'system',
+      task: 'task',
+      trace,
+    });
+    const call = trace.events.find((e) => e.type === 'tool_call')!;
+    expect(call.data.result).toBe(longPage);
+  });
 });

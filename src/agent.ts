@@ -120,7 +120,9 @@ export async function runAgent(args: {
         // Cut very long results so they do not eat the token budget.
         const content = out.length > limits.maxToolResultChars ? out.slice(0, limits.maxToolResultChars) : out;
         results.push({ type: 'tool_result', tool_use_id: call.id, content });
-        trace?.event('tool_call', { step: steps, name: call.name, input: call.input, result: content.slice(0, 500) });
+        // The whole result the model received (already limited by maxToolResultChars), not a shortened copy.
+        // A cut-off trace hides what the model actually saw, and the trace is the main tool for debugging.
+        trace?.event('tool_call', { step: steps, name: call.name, input: call.input, result: content });
         log?.(`         result: ${content.split('\n')[0]}${content.includes('\n') ? ' ...' : ''}`);
       } catch (e) {
         // A tool failed (blocked host, missing element, bad arguments...).
