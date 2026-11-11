@@ -477,6 +477,47 @@ Three runs per page is a small sample.
 5. Senior and group stay at 3 of 3 and false alarms at 0.
 6. A possible harm: the model hurries, writes less careful reports or checks less per step. We look for it in the titles, the last replies and the number of snapshots per step.
 
+## Step 6d: a prompt that states the real budget, the result
+
+Measured with the eval, 3 runs per page: `results/eval-prompt-all-summary.md` and `results/eval-prompt-none-summary.md`, traces in `results/eval-traces/prompt-all` and `prompt-none`. The first line of each trace holds the system prompt:
+all six runs used the new one. "6c fixed" is the baseline for this step.
+
+| | Baseline v4 | 6c fixed | 6d prompt |
+|---|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 3 / 1 of 3 | 3 / 2 / 0 of 3 | 3 / 2 / 0 of 3 |
+| All bugs: false alarms | 0 | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 12.7, 83,368 | 14.3, 79,987 | 11.0, 58,155 |
+| All bugs: ended on the token budget / on `done` | 2 / 1 | 2 / 1 | 0 / 3 |
+| All bugs: first order of 8 tickets seen at step | n/a | 13, 12, never | 4, 9, never |
+| All bugs: largest order built | n/a | 8, 8, 7 | 8, 8, 7 |
+| No bugs: false alarms | 0 | 0 | 0 |
+| No bugs: steps, tokens per run (mean) | 12.3, 89,620 | 14.3, 83,121 | 13.7, 66,825 |
+| No bugs: ended on the token budget / on `done` | 3 / 0 | 3 / 0 | 1 / 2 |
+| No bugs: first order of 10 tickets seen at step | n/a | 10, 12, 15 | 7, 10, 14 |
+| Snapshots per step, all bugs / no bugs | 0.97 / 1.35 | 0.93 / 1.14 | 0.76 / 0.66 |
+| Steps with 2 or more snapshots, all bugs / no bugs | 3 / 12 | 5 / 4 | 0 / 0 |
+
+**The guesses from the plan, one by one**
+
+1. *With bugs, an order of 8 tickets before step 10 in 3 of 3 runs, and at least one run reaches 10 or more:* **wrong.** 8 tickets at steps 4 and 9, and in one run never; the largest order was 8, 8 and 7 tickets, as before.
+2. *Steps and tokens per step about the same, most runs still end on the token budget:* **wrong.** Steps fell to 11.0 with bugs, tokens per step fell by 7% (with bugs) and 16% (without), and only 1 run of 6 ended on the token budget. 5 of 6 ended on `done`.
+3. *`limit-off-by-one` found in at least 1 of 3:* **wrong.** 0 of 3.
+4. *At most 1 of 3 runs ends on `done` before step 12, and no false claim of running out:* **wrong.** 3 of the 6 runs ended on `done` before step 12 (9, 11 and 11 steps), and all 5 runs that ended on `done` say in their last reply that they stopped because of the step budget:
+   "I've run out of step budget", "I've used most of the step budget", "I'm near the step budget", "I've used up the step budget", "I've reached the step budget". They stopped after 9 to 13 of 25 steps and with 36,000 to 79,000 of the 80,000 tokens used. Before this change, 1 run of 6 ended on `done`.
+5. *Senior and group at 3 of 3, false alarms 0:* **senior 3 of 3 and false alarms 0 are true, group 2 of 3 is not.** The run without the group report ended at step 9 with at most 7 tickets.
+6. *A possible harm (hurrying, less careful reports):* **happened in the form of early stopping, and see below for the care of reports.**
+
+**What the traces show**
+
+- **The number is read as a target.** "About 14 steps" made the model stop at about that number (9 to 13 steps) and call it running out, although it had steps and tokens left. The line "Do not stop while an area is untested" did not prevent it: in every `done` run the last reply lists untested areas, among them the limit of 10 tickets.
+  Before, with the vague "limited number of steps", the same thing happened rarely (1 run of 6, plus runs 9 and 12 in earlier baselines). A concrete number made it clearly worse. This is a result from 6 runs, but the last replies state the reason in plain words.
+- **On the page without bugs the planning did help a little:** the first order of 10 tickets came at steps 7, 10 and 14 instead of 10, 12 and 15, and all three runs tested the limit message. But two of those three runs then stopped early.
+- **The trimming shows another weakness.** In all-bugs run 3 the model reported a correct finding at step 7 (age 65 gives €15.00, total €75.00, read from the full snapshot of step 6) and cleared the order in the same reply. At step 8 the snapshot of step 6 was only the note about removed snapshots. The model then wrote that it had reported before it had seen the ticket list,
+  and in its last reply that the total of €75.00 "is not verified". The report was right and the model doubted it. In run 1 it wrote that an earlier snapshot "had no readable content". The 6c fixed evals had no complaints of this kind in 6 runs. So the note on a removed snapshot can make the model distrust its own correct earlier reading, especially when the model works in a hurry.
+
+**What it says:** the change did not help and mostly hurt: more early endings, fewer tokens used, nothing more found. It is not kept. Next candidates (each its own pull request): revert the budget rule to the old wording (back to "6c fixed", already measured, so no new eval needed),
+and later, as a separate experiment, a rule without any number ("do not stop while an area is untested; the run is stopped automatically if the budget ends"); and a better note for removed snapshots (for example one that says the page was seen before and the model's own notes are in the conversation).
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
