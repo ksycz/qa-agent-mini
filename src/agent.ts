@@ -3,7 +3,7 @@
 // The idea in plain words:
 //   1. Give the model the task and the menu of tools.
 //   2. The model answers. If it asks for tools, WE run them and give the results back. Go to 2.
-//   3. If the model answers without asking for a tool, it is finished.
+//   3. If the model answers without asking for a tool, it is finished (unless its answer was cut off).
 //
 // The model only decides what to do next. Our code does everything else, and it enforces LIMITS,
 // because a loop that talks to a paid model must never be able to run forever.
@@ -22,6 +22,10 @@ async function pageText(tools: ToolContext): Promise<string> {
     return '';
   }
 }
+
+// What the model is told after a reply was cut off by the length limit (issue #18).
+const CUT_OFF_NOTICE =
+  'Your last reply was cut off by the length limit, so its last call was not run. Send fewer calls at a time and keep the text short.';
 
 // The hard limits. All of them are checked by our code, not requested politely in the prompt.
 export type AgentLimits = {
@@ -106,24 +110,34 @@ export async function runAgent(args: {
       blockTypes: reply.blockTypes,
       content: reply.content,
     });
-    // Only a message on the screen, nothing else changes: a cut-off answer may end with an incomplete tool call.
+    // A cut-off answer may end with an incomplete tool call: see step 2 below.
     if (reply.stopReason === 'max_tokens') log?.(`step ${steps}: the reply was cut off by the length limit (max_tokens)`);
 
     // Remember the text part of the answer, and find the tool requests in it.
     finalText = reply.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');
-    const calls = reply.content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+    let content = reply.content;
+    let calls = content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
 
-    // 2. No tool requested = the model considers itself finished. This is the normal ending.
-    if (calls.length === 0) {
+    // 2. A reply cut off by the length limit (issue #18) is NOT "the model is finished", and its LAST call may be
+    // half written. We do not run that call. We drop it from the conversation too, because the API wants a result
+    // for every call in it. The model is told what happened further down.
+    const cutOff = reply.stopReason === 'max_tokens';
+    if (cutOff && calls.length > 0) {
+      const halfCall = calls[calls.length - 1];
+      content = content.filter((b) => b !== halfCall);
+      calls = calls.slice(0, -1);
+    }
+    if (content.length === 0) content = [{ type: 'text', text: '(reply cut off)' }]; // the API refuses an empty message
+
+    // 3. No tool requested = the model considers itself finished. This is the normal ending.
+    // (Not when the reply was cut off: then the model had no chance to finish.)
+    if (calls.length === 0 && !cutOff) {
       log?.(`step ${steps}: model says: ${finalText}`);
       return finish('done');
     }
 
-    // 3. Safety: out of token budget? Stop now, before spending more.
-    if (inputTokens + outputTokens > limits.tokenBudget) return finish('token_budget');
-
     // 4. Add the model's answer to the conversation, so the next call sees what it asked for.
-    messages.push({ role: 'assistant', content: reply.content });
+    messages.push({ role: 'assistant', content });
 
     // 5. Run every requested tool and collect the answers.
     const results: ToolResultBlock[] = [];
@@ -161,8 +175,13 @@ export async function runAgent(args: {
       if (stuck) return finish('repeated_call');
     }
 
-    // 6. Give the results back to the model as the next "user" message. Then the loop goes round again.
-    messages.push({ role: 'user', content: results });
+    // 6. Give the results back to the model as the next "user" message. After a cut-off reply, the model also gets the notice.
+    messages.push({ role: 'user', content: cutOff ? [...results, { type: 'text', text: CUT_OFF_NOTICE }] : results });
+
+    // 7. Safety: out of token budget? Stop now, before the NEXT model call, which is the only thing that costs tokens.
+    // This check comes after the tools ran on purpose: running a tool is free, and a report_issue in the reply
+    // that went over the budget (issue #20) must not be thrown away.
+    if (inputTokens + outputTokens > limits.tokenBudget) return finish('token_budget');
   }
 
   // We left the loop because we ran out of steps.
