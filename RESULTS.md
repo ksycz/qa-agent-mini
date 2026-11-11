@@ -595,6 +595,42 @@ senior 3 of 3, group 2 of 3, limit 3 of 3 with bugs; 0 false alarms; 13.0 steps 
 3. The model asks for a `snapshot` more often after `add_visitors` than 11 of 37 (29%), because the old page is gone and it has less to look at. This is a weak guess.
 4. A possible harm, seen in step 6d: the model doubts its own correct earlier reading of a page that was cut (a note such as "had no readable content" in the traces). We look for it in the last replies and the reports.
 
+## Step 6f: trimming the page inside old `add_visitors` results, the result
+
+Measured with the eval, 3 runs per page: `results/eval-trimadd-all-summary.md` and `results/eval-trimadd-none-summary.md`, traces in `results/eval-traces/trimadd-all` and `trimadd-none`. Baseline is step 6e (this PR changed only the trimming).
+
+| | 6c fixed | 6e `add_visitors` | 6f trimmed pages |
+|---|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 2 / 0 of 3 | 3 / 2 / 3 of 3 | 3 / 3 / 1 of 3 |
+| False alarms (with and without bugs) | 0 | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 14.3, 79,987 | 13.0, 67,207 | 14.0, 65,310 |
+| All bugs: tokens per step | 5,580 | 5,170 | 4,665 |
+| No bugs: steps, tokens per run (mean) | 14.3, 83,121 | 15.7, 77,875 | 17.3, 86,484 |
+| No bugs: tokens per step | 5,840 | 4,971 | 4,989 |
+| Ended on the token budget / on `done`, all bugs / no bugs | 2 / 1, 3 / 0 | 1 / 2, 2 / 1 | 1 / 2, 3 / 0 |
+| Calls of `add_visitors` that repeat an identical earlier call, with bugs / without | n/a | 2 of 20 / 1 of 17 | 12 of 28 / 15 of 32 |
+| Snapshot calls right after `add_visitors` | n/a | 11 of 37 | 34 of 60 |
+
+**The guesses from the plan, one by one**
+
+1. *Tokens per step at least 5% lower than in 6e, with bugs and without:* **half true.** With bugs 4,665 against 5,170 (10% lower); without bugs 4,989 against 4,971 (no change).
+2. *Senior 3 of 3, limit 3 of 3, group 2 or 3 of 3, false alarms 0:* **wrong for the limit.** Senior 3 of 3, group 3 of 3, false alarms 0, but `limit-off-by-one` only 1 of 3 (before 3 of 3).
+3. *The model asks for `snapshot` after `add_visitors` more often than in 29% of cases:* **true.** 34 of 60 (57%).
+4. *A possible harm: the model doubts its own earlier reading:* **it happened, and it was the main effect.** See below.
+
+**What the traces show**
+
+- **The model repeats tests it has already done.** In 6e, 3 of 37 `add_visitors` calls repeated an identical earlier call. Now it is 27 of 60. In no-bugs run 2 the list of 8 ages was added 5 times and the 7 adults 4 times, always with a "Clear order" in between.
+  In all-bugs run 3 the order of 65 was added 5 times and an order of 8 adults of age 18 twice. Without the page in older results, the status text "Added 7 of 7 visitors." is all the model sees.
+- **It says so in plain words.** In no-bugs run 2: "I claimed the first result matched without actually reading its page output, so I'll re-run that set and check it." Later: "The add_visitors results did not include the ticket list, so my claims that the 8-ticket order showed €72.00 were not based on anything I observed."
+  In fact the model had read the page one round earlier and had written the correct sum (9+9+18+18+9+9 = 72). It lost the evidence, so it did not trust its own words. This is the same weakness as in step 6d, now much stronger, because `add_visitors` tests are run again and again: each one needs "Clear order" and a new call.
+- **The saving disappears and the useful work goes down.** Tokens per step fell by 10% with bugs, but without bugs not at all, because the steps were spent on repeats. All three runs without bugs ended on the token budget (85,000 to 87,000 tokens). They had an order of 10 early (at steps 5, 10 and 6) and then spent the rest of the steps on the repeats.
+- **The limit was missed because of it.** All-bugs run 1 never built more than 8 tickets (it repeated the order of 8 three times). In all-bugs run 3 the page showed 11 tickets at step 11, but the run ended on the token budget at step 17 without reporting it. Group was found in 3 of 3 runs, but probably because the order of 8 was repeated so often.
+
+**What it says:** the change did not help and mostly hurt: more repeats, the limit bug lost, no real saving without bugs. It is not kept; the code of this pull request is reverted and only this result stays. The lesson: the page in a tool result is the evidence of the test, and cutting it makes the model re-do the test.
+Trimming only helps when the model does not need the old page. For `snapshot` it mostly worked (the model can call it again for the current page); for `add_visitors` the old page cannot be called again without repeating the whole order.
+Next candidates (each its own pull request): a better note for removed snapshots that says the page was already read and the model's earlier text holds what it found, so it does not repeat the test; a smaller `add_visitors` result that keeps only the part of the page that changes (the list of tickets, the total and any message) instead of the whole page, so there is less to trim.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

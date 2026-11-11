@@ -48,41 +48,4 @@ describe('trimOldSnapshots', () => {
     expect(trimOldSnapshots(one)).toEqual(one);
     expect(trimOldSnapshots([{ role: 'user', content: 'task' }])).toEqual([{ role: 'user', content: 'task' }]);
   });
-
-  // Step 6f: the result of add_visitors holds a status text and a page. Old pages are cut, the status text stays.
-  it('cuts the page inside OLD add_visitors results, keeps their status text, and leaves the latest round whole', () => {
-    const result = (status: string, page: string) => `${status}\nPage now:\n${page}`;
-    const messages: Message[] = [
-      { role: 'user', content: 'task' },
-      { role: 'assistant', content: [{ type: 'tool_use', id: 'v1', name: 'add_visitors', input: {} }] },
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'v1', content: result('Added 3 of 3 visitors.', 'OLD PAGE') }] },
-      { role: 'assistant', content: [{ type: 'tool_use', id: 'v2', name: 'add_visitors', input: {} }, { type: 'tool_use', id: 'v3', name: 'add_visitors', input: {} }] },
-      {
-        role: 'user',
-        content: [
-          { type: 'tool_result', tool_use_id: 'v2', content: result('Stopped after age 30 (3 of 3). The page says: Maximum 10 tickets per order.', 'NEW PAGE A') },
-          { type: 'tool_result', tool_use_id: 'v3', content: 'ERROR: "-1" is not a whole number', is_error: true },
-        ],
-      },
-    ];
-    const text = JSON.stringify(trimOldSnapshots(messages));
-    expect(text).not.toContain('OLD PAGE');
-    expect(text).toContain('Added 3 of 3 visitors.'); // the status text of the old result stays
-    expect(text).toContain(SNAPSHOT_REMOVED);
-    expect(text).toContain('NEW PAGE A'); // latest round: untouched
-    expect(text).toContain('Maximum 10 tickets per order.');
-    expect(text).toContain('is not a whole number'); // errors stay
-    expect(JSON.stringify(messages)).toContain('OLD PAGE'); // the original is not changed
-  });
-
-  it('leaves an old add_visitors result without the marker line as it is', () => {
-    const messages: Message[] = [
-      { role: 'user', content: 'task' },
-      { role: 'assistant', content: [{ type: 'tool_use', id: 'v1', name: 'add_visitors', input: {} }] },
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'v1', content: 'something else' }] },
-      { role: 'assistant', content: [{ type: 'tool_use', id: 's1', name: 'snapshot', input: {} }] },
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 's1', content: 'PAGE' }] },
-    ];
-    expect(JSON.stringify(trimOldSnapshots(messages))).toContain('something else');
-  });
 });

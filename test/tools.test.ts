@@ -104,7 +104,7 @@ describe('add_visitors', () => {
       'fill Visitor age=65', 'click button/Add visitor',
       'fill Visitor age=8', 'click button/Add visitor',
     ]);
-    expect(out).toBe('Added 3 of 3 visitors.\nPage now:\n- paragraph: 3 tickets');
+    expect(out).toBe('Added 3 of 3 visitors.\n- paragraph: 3 tickets');
   });
 
   it('stops at the first message of the page and tells the model what it said', async () => {
