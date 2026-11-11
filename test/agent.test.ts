@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { runAgent, type AgentLimits } from '../src/agent';
 import type { BrowserPort } from '../src/browser';
 import { say, scriptedLlm, toolCall, toolCalls } from '../src/fake-llm';
-import type { LlmClient } from '../src/llm';
+import type { LlmClient, LlmResponse } from '../src/llm';
 import { memoryTrace } from '../src/trace';
 
 // A fake browser that only writes down what it was asked to do.
@@ -20,6 +20,11 @@ function fakeBrowser(log: string[] = []): BrowserPort {
     fill: async (l, t) => void log.push(`fill ${l}=${t}`),
     close: async () => {},
   };
+}
+
+// A model answer that was cut off by the length limit: stopReason is 'max_tokens' and the last call may be half written.
+function cutOffReply(calls: [string, Record<string, unknown>][]): LlmResponse {
+  return { ...(calls.length ? toolCalls(calls) : { ...say(''), content: [] }), stopReason: 'max_tokens' };
 }
 
 // Runs the loop with the given fake model. `limits` overrides defaults for one test.
@@ -185,18 +190,64 @@ describe('agent loop', () => {
     expect(replies.map((e) => e.data.blockTypes)).toEqual([['tool_use'], ['text']]);
   });
 
-  it('prints a message when a reply was cut off, and does not change what the loop does', async () => {
+  it('prints a message when a reply was cut off', async () => {
     const lines: string[] = [];
-    const cutOff = { ...say('done?'), stopReason: 'max_tokens' };
     const r = await runAgent({
-      llm: scriptedLlm([cutOff]),
+      llm: scriptedLlm([cutOffReply([]), say('finished')]),
       tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
       system: 'system',
       task: 'task',
       log: (l) => lines.push(l),
     });
     expect(lines.some((l) => l.includes('cut off'))).toBe(true);
-    expect(r.stopReason).toBe('done'); // unchanged for now: treating a cut-off reply differently is issue #18
+    expect(r.stopReason).toBe('done'); // the second reply is a normal one, so the run ends normally
+  });
+
+  // CUT-OFF REPLIES (issue #18). A reply that hit maxTokensPerReply is NOT "the model is finished",
+  // and its last call may be only half written, so we do not run it.
+  it('does not call an empty cut-off reply "done": it tells the model and goes on', async () => {
+    const llm = scriptedLlm([cutOffReply([]), say('finished')]);
+    const r = await run(llm);
+    expect(r.stopReason).toBe('done');
+    expect(r.steps).toBe(2); // the cut-off reply did not end the run
+    // The model must be told what happened, and the conversation must stay valid (no empty assistant message).
+    const second = llm.requests[1].messages;
+    expect(JSON.stringify(second)).toContain('cut off');
+    expect(second.every((m) => m.content.length > 0)).toBe(true);
+  });
+
+  it('runs the complete calls of a cut-off reply, skips the last one, and tells the model', async () => {
+    const log: string[] = [];
+    const llm = scriptedLlm([
+      cutOffReply([
+        ['open_page', { url: 'http://127.0.0.1:1/' }],
+        ['fill', { label: 'Visitor age', text: '5' }],
+        ['click', {}], // the half-written call: cut off in the middle
+      ]),
+      say('finished'),
+    ]);
+    await run(llm, {}, log);
+    expect(log).toEqual(['open http://127.0.0.1:1/', 'fill Visitor age=5']); // the half call did not run
+    const last = llm.requests[1].messages.at(-1)!;
+    const blocks = last.content as Array<{ type: string; text?: string }>;
+    expect(blocks.filter((b) => b.type === 'tool_result')).toHaveLength(2); // one result for each call we kept
+    expect(blocks.some((b) => b.type === 'text' && b.text!.includes('cut off'))).toBe(true);
+    // The assistant message in the history no longer contains the call we did not run,
+    // because the API wants a result for every call in it.
+    const assistant = llm.requests[1].messages.at(-2)!.content as Array<{ type: string }>;
+    expect(assistant.filter((b) => b.type === 'tool_use')).toHaveLength(2);
+  });
+
+  // THE BUDGET (issue #20). Running a tool costs no tokens. Only the NEXT model call does.
+  // So a reply that goes over the budget still gets its tools run, and the run stops before the next call.
+  it('runs the tools of the reply that goes over the budget, then stops (a report is not lost)', async () => {
+    const issue = { title: 'Senior', steps: 's', expected: 'e', actual: 'a' };
+    const first = toolCall('snapshot', {}); // 110 pretend tokens: below the budget
+    const last = { ...toolCall('report_issue', issue), usage: { inputTokens: 500, outputTokens: 10 } }; // goes over
+    const r = await run(scriptedLlm([first, last, say('never reached')]), { tokenBudget: 300 });
+    expect(r.stopReason).toBe('token_budget');
+    expect(r.steps).toBe(2); // no third call to the model
+    expect(r.issues).toHaveLength(1); // the report from the last reply was kept
   });
 
   it('keeps the whole tool result in the trace, not a shortened copy', async () => {

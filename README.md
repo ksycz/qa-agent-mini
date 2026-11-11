@@ -104,7 +104,18 @@ Reading the four runs of baseline v3 showed that the trace lacked facts we neede
   (the type of every block the API returned, also the ones we drop, such as `thinking`, because they still use output tokens).
 - The terminal prints a line when a reply was cut off.
 
-The loop does not act on `stopReason` yet. That is issue #18. Because behavior is the same, runs from before and after this change can be compared.
+At that time the loop did not act on `stopReason` yet. It does now, see the next section. Because behavior was the same, runs from before and after #17 can be compared.
+
+### Afterwards: reply handling (issues #18 and #20)
+
+Runs 7 to 11 showed two losses inside the loop. This time the behavior of the agent does change, so runs after this change are measured against baseline v3 and run 11.
+
+- **A cut-off reply is not "done" (#18).** If a reply stopped because of `max_tokens`, the loop goes on. Its last call may be half written, so that call is not run and is removed from the conversation
+  (the API wants a result for every call in a message). The calls before it run normally. The model gets one extra line saying the reply was cut off and that it should send fewer calls at a time.
+  An empty cut-off reply is stored as the text `(reply cut off)`, because the API refuses an empty message.
+- **The tools of the last reply run before the budget stop (#20).** The token check now sits at the end of the round, before the next model call. Running a tool costs no tokens, only the next model call does,
+  so a `report_issue` in the reply that crosses the budget is no longer thrown away.
+- Not changed here: the size of `maxTokensPerReply`, hidden "thinking" blocks, the prompt. Each of those is its own change.
 
 ## Step 4: the first real run
 
