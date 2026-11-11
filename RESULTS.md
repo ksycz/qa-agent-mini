@@ -13,6 +13,14 @@ How to read the table:
 | Run | Date | Model | Page | Change since previous run | Bugs found | False alarms | Steps | Tokens (in / out) | Stopped because |
 |---|---|---|---|---|---|---|---|---|---|
 | [1](results/run-01-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs | none (first run, this is the baseline) | 2 of 3 | 0 | 14 | 82,650 / 6,078 | token budget (80,000) |
+| [2](results/run-02-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs | none (repeat of run 1, to see how much runs differ) | 2 of 3 | 0 | 14 | 80,826 / 6,937 | token budget (80,000) |
+
+## Summary of runs 1 and 2
+
+Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
+and a stop on the token budget both times. The token counts differ by about 1% (88,728 and 87,763).
+The agent is not random here: the miss and the budget problem are systematic, so they come from the prompt and the design, not from luck.
+Two runs are still a small sample. The eval in step 6 will repeat runs automatically.
 
 ## Run 1: the baseline
 
@@ -30,11 +38,24 @@ The budget is checked after a reply, so the run ended slightly over 80,000.
 **What worked:** at step 9 the model called `click` without the `name` argument. The tool returned `Missing or empty argument "name"` as text,
 and the model corrected the call at step 10. The loop did not crash.
 
+## Run 2: a repeat, no changes
+
+**Found:** the same two bugs. **Missed:** the same one, `limit-off-by-one`. The agent reached 8 tickets but never tried an 11th.
+
+**Reloaded the page twice** (steps 6 and 9) to start from an empty order. Every reload means adding visitors again, which costs steps and tokens.
+
+**A silent mistake in a tool call (step 9):** the model called `fill` without the `text` argument. The tool schema says `text` is required,
+but our code treats a missing `text` as an empty string (this is on purpose for clearing a field), so the call "succeeded" and cleared the field.
+In run 1 the same kind of mistake (`click` without `name`) was caught, because that argument is checked. Lesson: a tool should check its input
+against its own schema, and decide deliberately which arguments may be empty.
+
 **Ideas to try next, one at a time (not done yet):**
 
 1. Prompt: tell the agent to try one more than every limit.
 2. Context: keep only the latest snapshot in the conversation instead of all of them.
 3. Cost: prompt caching for the part that repeats (system prompt, spec, tools).
 4. Efficiency: a smaller snapshot, or fewer snapshots per step.
+5. Tools: check required arguments against the tool schema, so a missing argument is an error the model can read.
+6. Prompt: tell the agent that a reload is expensive and that the order is empty only after a reload.
 
 Change one thing per run, so the table shows what helped.
