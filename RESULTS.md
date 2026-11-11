@@ -537,6 +537,49 @@ Three runs per page is a small sample.
 5. A possible harm: the model sends one long list (for example 11 ages) at once and never checks the totals in between, so it misses the senior or group price. We look for it in the traces: how many ages per call, and whether it reads the total after the call.
 6. A possible harm: the stop at the page message hides a second problem after the message. This is fine for the limit message; we look for other messages in the traces.
 
+## Step 6e: a tool that adds several visitors in one call, the result
+
+Measured with the eval, 3 runs per page: `results/eval-addvisitors-all-summary.md` and `results/eval-addvisitors-none-summary.md`, traces in `results/eval-traces/addvisitors-all` and `addvisitors-none`.
+The first line of each trace shows six tools in the menu. "6c fixed" is the baseline for this step. Three runs per page is a small sample, but the cause of the gain is visible in the traces (see below).
+
+| | Baseline v4 | 6c fixed | 6e `add_visitors` |
+|---|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 3 / 1 of 3 | 3 / 2 / 0 of 3 | 3 / 2 / 3 of 3 |
+| All bugs: false alarms | 0 | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 12.7, 83,368 | 14.3, 79,987 | 13.0, 67,207 |
+| All bugs: tokens per step | n/a | 5,580 | 5,170 |
+| All bugs: ended on the token budget / on `done` | 2 / 1 | 2 / 1 | 1 / 2 |
+| All bugs: first order of 8 or more tickets seen at step | n/a | 13, 12, never | 2, 2, 2 |
+| All bugs: largest order built | n/a | 8, 8, 7 | 11, 11, 11 |
+| No bugs: false alarms | 0 | 0 | 0 |
+| No bugs: steps, tokens per run (mean) | 12.3, 89,620 | 14.3, 83,121 | 15.7, 77,875 |
+| No bugs: tokens per step | n/a | 5,840 | 4,971 |
+| No bugs: ended on the token budget / on `done` | 3 / 0 | 3 / 0 | 2 / 1 |
+| No bugs: first order of 10 tickets seen at step | n/a | 10, 12, 15 | 8, 6, 8 |
+| Snapshot calls per step, all bugs / no bugs | 0.97 / 1.35 | 0.93 / 1.14 | 0.31 / 0.72 |
+
+**The guesses from the plan, one by one**
+
+1. *The model uses `add_visitors` in at least 2 of 3 runs on each page; it may still call `snapshot` after each one:* **true for both parts.** It used the tool in 6 of 6 runs (8, 8, 4 calls with bugs; 5, 7, 5 without). A `snapshot` call came right after an `add_visitors` call in 11 of 37 cases (4 of 20 with bugs, 7 of 17 without), although the result already holds the page.
+2. *At least one run builds an order of 11 or hits the limit message, and `limit-off-by-one` is found in at least 1 of 3:* **true, and more than guessed.** With bugs all three runs built an order of 11 and reported the limit (3 of 3, before 0 of 3). Without bugs all three runs hit the message "Maximum 10 tickets per order." and none reported it.
+3. *Steps per run go up (16 or more), tokens per step within 10% of "6c fixed":* **mostly wrong.** Steps were 13.0 (with bugs; one run ended at step 8) and 15.7 (without), not 16 or more with bugs. Tokens per step fell by 7% (with bugs) and 15% (without), so the second half is outside "within 10%" in the good direction.
+4. *Senior and group at 2 or 3 of 3, false alarms 0, the limit message not reported on the page without bugs:* **true.** Senior 3 of 3, group 2 of 3, no false alarms.
+5. *Harm: one long list and no checking of prices in between:* **not seen in the reports**, but see below: the first call of every run was one list of 8 or 9 ages, and the group bug was seen only because the list had exactly 8 ages.
+6. *Harm: the stop at the page message hides a second problem:* **not seen.** The tool stopped on the message of the limit (3 runs) and on "Enter an age from 0 to 120" (1 run, age 121); nothing was hidden behind them.
+
+**What the traces show**
+
+- **The gain comes from the mechanism.** In every run with bugs the 11th ticket was reached by one call (`add_visitors` with eleven 30s) and the first order of 8 or more tickets appeared at step 2, instead of step 12 or 13. Before, an order of 11 tickets cost 22 calls and the agent never had them.
+- **The group bug was found by the shape of the first list.** In all six runs the first call was one list of boundary ages (0, 5, 6, 17, 18, 64, 65, 120). With 8 ages this is an order of 8 tickets, and the missing 10% shows. In all-bugs run 3 the list had 9 ages (an extra 30 in front), the order of 8 never came, and that run alone missed `group-threshold`. So 2 of 3 is partly luck of the list length.
+- **The tool refuses `-1`, as designed, and costs one step each run.** In all six runs the model first tried `add_visitors` with -1, got "is not a whole number" and then used `fill` and `click`. That is one wasted step per run; the rule is kept, because the tool is for ordinary ages.
+- **The old snapshot trimming does not reach the new tool.** `trimOldSnapshots` removes only the results of calls named `snapshot`. The result of `add_visitors` also holds a full snapshot, so those pages stay in the history in full. Tokens per step still fell, but a part of the saving of step 6c is lost. This is a candidate for the next small step.
+- **The prompt rule "after every action call snapshot" is still followed in part:** 11 snapshot calls after `add_visitors`, and with no bugs the model took 16, 7 and 11 snapshots in total. It is the largest remaining waste.
+- **One early end:** all-bugs run 3 ended on `done` at step 8 with 31,926 tokens, after two confirmed bugs, without testing an order of 8. It did not claim that it ran out of budget. The `done` of run 2 (16 steps, 85,101 tokens) said that two checks were beyond the budget, which was true.
+- The model also called a tool that does not exist (`clear_check_placeholder`, all-bugs run 2). The loop returned an error and went on.
+
+**What it says:** the change helps, and it stays. `limit-off-by-one` went from 0 of 3 to 3 of 3, nothing got worse in the bugs found, there are no false alarms, and the price per step went down. Next candidates (each its own pull request): treat the page text inside the `add_visitors` result like a snapshot in the trimming; a prompt line that says `add_visitors` already returns the page (so no `snapshot` after it);
+a line that asks for orders of exactly 8 and 9 tickets, so the group bug does not depend on the list length; a better note for removed snapshots; a higher token budget.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
