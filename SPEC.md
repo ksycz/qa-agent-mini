@@ -25,6 +25,11 @@ for the product owner, not a bug.
 - A valid age is a whole number from 0 to 120. Anything else (empty, decimal, below 0, above 120)
   shows the message "Enter an age from 0 to 120." and adds no ticket.
 
+## Clear order
+
+- The button "Clear order" removes all tickets and any message. The total goes back to "Total: €0.00".
+- After clearing, a new order starts from zero: the limit of 10 and the group discount count from the beginning again.
+
 ## Display
 
 - Ticket prices are shown in euro with two decimals, for example €14.00.

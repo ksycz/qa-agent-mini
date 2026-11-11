@@ -38,6 +38,7 @@
       width: 100%; margin-top: 1rem; font: inherit; font-weight: 700; padding: .8rem 1rem; cursor: pointer;
       border: 0; border-radius: .6rem; background: var(--stripe); color: var(--ink);
     }
+    .form button.secondary { margin-top: .6rem; background: transparent; color: var(--paper); border: 2px solid var(--paper); }
     .form button:hover { filter: brightness(1.06); }
     input:focus-visible, button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
     .form button:focus-visible { outline-color: var(--stripe); }
@@ -82,6 +83,7 @@
         <label for="age">Visitor age</label>
         <input id="age" type="number" />
         <button id="add" type="button">Add visitor</button>
+        <button id="clear" type="button" class="secondary">Clear order</button>
         <p id="message" role="alert"></p>
       </div>
 
@@ -141,6 +143,14 @@
 
       ages.push(age);
       input.value = ''; // empty the field for the next visitor
+      render();
+    });
+
+    // What happens when someone clicks "Clear order": start again with an empty order.
+    // It removes all tickets and any message, and the total goes back to €0.00.
+    document.getElementById('clear').addEventListener('click', () => {
+      ages.length = 0; // empty the list of visitors
+      message.textContent = '';
       render();
     });
   </script>
