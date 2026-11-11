@@ -69,10 +69,11 @@ Each step is a small pull request, so the history reads like a tutorial.
   and the loop handles cut-off replies and runs the tools of the last reply before the budget stop (issues #18 and #20).
 - [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
 - [x] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees in full only the snapshots of the latest round (the results of its last reply), so every step sends fewer input tokens. Measured: about 24% fewer tokens per step, no clear loss in bugs found, but no more bugs found either, and the traces showed a flaw (the model does not see the earlier snapshots of the same reply). The fix (keep all snapshots of the latest round, not only the single newest one) is in the section "Step 6c, fixed" in `RESULTS.md`, which also has the plan and the guesses.
+- [ ] **Step 6d: second improvement, measured with the eval: a prompt that states the real budget.** The model is told it has about 14 steps and 80,000 tokens, to cover every area of the specification before the budget runs out, and not to stop early. Built; it stays only if the eval shows it helps (plan and guesses in `RESULTS.md`).
 - [ ] **Step 6b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling. Measured with the eval, so it comes after it.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against stopping early and against batches of clicks without refilling the age field,
+- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against batches of clicks without refilling the age field,
   the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -155,6 +156,17 @@ The model only needs the page as it is now, and the snapshots of its latest roun
 - Where the tokens go (runs 11 and 13): about 29% is the fixed part sent again in every step (system prompt, specification, tool list), the rest grows with the conversation, and about half of that is the model's own replies (batches of 10 to 12 tool calls).
   Old snapshots are the part this step removes. The fixed part is what prompt caching would address (step 9).
 - This is a change of behavior, so it is measured: `npm run eval` with and without bugs, compared with baseline v4. Guesses written before the runs are in `RESULTS.md`.
+
+## Step 6d: a prompt that states the real budget
+
+The traces of the evals after step 6c showed that the agent has about 13 to 15 steps in practice (the token budget ends 5 of 6 runs), not the 25 of `maxSteps`, and that it did not know this:
+it tested ages first and reached an order of 8 tickets only at step 12 or 13, so it never got to the limit of 10. Once the model also stopped at 9 of 25 steps and wrote that it had run out of steps.
+
+- `src/prompt.ts`: the last rule of `SYSTEM_PROMPT` is replaced by two. The first states the budget (about 14 steps, 80,000 tokens, every step sends the whole conversation again) and asks to cover every area of the specification before it runs out.
+  The second says not to stop while an area is untested and not to claim that the budget ran out when it did not.
+- "80,000" is the real limit, so a test (`test/prompt.test.ts`) keeps the number in the prompt equal to `DEFAULT_LIMITS.tokenBudget`. "About 14 steps" is not a limit, it is what the eval runs reached (13 to 15).
+- The safety limits themselves did not change: they stay in code (step 3), the prompt only tells the model about them.
+- It is a change of behavior, so it is measured with `npm run eval`. Guesses written before the runs are in `RESULTS.md`.
 
 ## Step 4: the first real run
 
