@@ -128,6 +128,10 @@ function validateInput(def: ToolDef, input: Record<string, unknown>): void {
 // Before this tool every ticket cost the model two calls (fill, then click). Now our code does the repeating.
 // The browser work is the same as before, only the model is not asked between the actions.
 
+// The line that stands between the status text and the page text in the result of add_visitors.
+// The trimming of old results (src/trim-snapshots.ts) cuts everything after this line, so it must be a fixed text.
+export const PAGE_MARKER = 'Page now:';
+
 // A safety limit in code: one call can add at most this many visitors.
 export const MAX_VISITORS_PER_CALL = 12;
 
@@ -165,11 +169,11 @@ async function addVisitors(ctx: ToolContext, agesText: string): Promise<string> 
     const message = findAlert(await ctx.browser.snapshot());
     if (message !== '') {
       const page = cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
-      return `Stopped after age ${age} (${added} of ${pieces.length}). The page says: ${message}\nThe remaining ages were not added.\n${page}`;
+      return `Stopped after age ${age} (${added} of ${pieces.length}). The page says: ${message}\nThe remaining ages were not added.\n${PAGE_MARKER}\n${page}`;
     }
   }
   const page = cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
-  return `Added ${added} of ${pieces.length} visitors.\n${page}`;
+  return `Added ${added} of ${pieces.length} visitors.\n${PAGE_MARKER}\n${page}`;
 }
 
 // 5. RUN ONE TOOL. Returns text for the model. If something goes wrong it THROWS an error.

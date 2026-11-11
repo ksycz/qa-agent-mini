@@ -580,6 +580,21 @@ The first line of each trace shows six tools in the menu. "6c fixed" is the base
 **What it says:** the change helps, and it stays. `limit-off-by-one` went from 0 of 3 to 3 of 3, nothing got worse in the bugs found, there are no false alarms, and the price per step went down. Next candidates (each its own pull request): treat the page text inside the `add_visitors` result like a snapshot in the trimming; a prompt line that says `add_visitors` already returns the page (so no `snapshot` after it);
 a line that asks for orders of exactly 8 and 9 tickets, so the group bug does not depend on the list length; a better note for removed snapshots; a higher token budget.
 
+## Step 6f: trimming the page inside old `add_visitors` results (the plan, written before the runs)
+
+**The change:** the result of `add_visitors` gets a fixed line `Page now:` before the page (`src/tools.ts`), and `trimOldSnapshots` (`src/trim-snapshots.ts`) replaces everything after that line in older rounds by the note for removed snapshots. The status text stays. Nothing else changes: prompt, limits, tools and page are as in step 6e.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, traces kept, compared with step 6e (result above), where:
+senior 3 of 3, group 2 of 3, limit 3 of 3 with bugs; 0 false alarms; 13.0 steps and 5,170 tokens per step (with bugs); 15.7 steps and 4,971 tokens per step (without);
+6 of 6 runs used `add_visitors`; the model called `snapshot` right after `add_visitors` in 11 of 37 cases. Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. Tokens per step are at least 5% lower than in step 6e, with bugs and without. The larger the lists of tickets, the larger the saving.
+2. Senior 3 of 3, limit 3 of 3, group 2 or 3 of 3, false alarms 0. A drop in bugs found would be a surprise, because the status text and the page of the latest round are still there.
+3. The model asks for a `snapshot` more often after `add_visitors` than 11 of 37 (29%), because the old page is gone and it has less to look at. This is a weak guess.
+4. A possible harm, seen in step 6d: the model doubts its own correct earlier reading of a page that was cut (a note such as "had no readable content" in the traces). We look for it in the last replies and the reports.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
