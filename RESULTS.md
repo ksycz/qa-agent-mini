@@ -458,6 +458,25 @@ We keep it. The weakest bug stays weak because the agent runs out of budget befo
 **Next candidate:** the agent has about 13 to 15 steps in practice, not 25, and it spends them on ages first. Options, each its own pull request: a prompt that states the real budget and asks to cover every area (order sizes up to one above the limit) before it runs out;
 or a cheaper way to build an order (a tool that adds several visitors in one call), or a larger token budget. Details to decide with the owner.
 
+## Step 6d: a prompt that states the real budget (the plan, written before the runs)
+
+**The change:** the last rule of the system prompt is replaced by two (`src/prompt.ts`): the model is told that it has about 14 steps and that the run is stopped at 80,000 tokens, to plan so that every area of the specification is tested before the budget runs out,
+not to stop while an area is untested, and not to claim that the budget ran out when it did not. Limits, tools, trimming and the page are as in "6c fixed". The token budget is not changed (that would be a second change; it may follow separately).
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, traces kept, compared with "6c fixed" (results above), where:
+senior 3 of 3, group 2 of 3, limit 0 of 3 with bugs; 0 false alarms; 14.3 steps per run; about 5,580 tokens per step (with bugs) and 5,840 (without);
+with bugs the first order of 8 tickets was seen at step 12 or 13 (once never) and no run built an order larger than 8; without bugs the first order of 10 at steps 10, 12 and 15; 5 of 6 runs ended on the token budget, 1 on `done` (step 14).
+Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. With bugs, an order of 8 tickets appears before step 10 in 3 of 3 runs, and at least one run reaches 10 or more tickets.
+2. Steps per run stay about the same (13 to 15) and tokens per step stay within 5% of "6c fixed", because limits and trimming do not change. Most runs still end on the token budget.
+3. `limit-off-by-one` is found in at least 1 of 3 runs. This is a weak guess: the prompt does not change the budget, so the order of testing has to change enough.
+4. A `done` before step 12 happens in at most 1 of 3 runs, and no run says it ran out of steps or budget when it did not.
+5. Senior and group stay at 3 of 3 and false alarms at 0.
+6. A possible harm: the model hurries, writes less careful reports or checks less per step. We look for it in the titles, the last replies and the number of snapshots per step.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
