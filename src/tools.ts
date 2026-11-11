@@ -92,21 +92,39 @@ export function assertAllowed(url: string, allowedHosts: string[]): void {
   }
 }
 
-// Reads one text argument from the model's input and checks that it is not missing or empty.
-// Models sometimes forget an argument; a clear error message lets them fix the call.
-function str(input: Record<string, unknown>, key: string): string {
-  const v = input[key];
-  if (typeof v !== 'string' || v.trim() === '') throw new Error(`Missing or empty argument "${key}"`);
-  return v;
+// Arguments that are required but may be an empty string on purpose.
+// Typing "" into a field is how a tester clears it. Everything else required must contain text.
+const MAY_BE_EMPTY: Record<string, string[]> = { fill: ['text'] };
+
+// Checks the model's input against the tool's own definition in TOOL_DEFS (the "schema").
+// Models sometimes forget an argument. A missing one is an ERROR the model can read and fix, never silently turned into "".
+// (Issue #9: `fill` without `text` used to succeed and clear the field, because a missing text was treated as "".)
+// The menu (TOOL_DEFS) is the single source of truth: if a tool gets a new required argument there, it is checked here.
+function validateInput(def: ToolDef, input: Record<string, unknown>): void {
+  const required = (def.input_schema.required ?? []) as string[];
+  for (const key of required) {
+    const v = input[key];
+    if (typeof v !== 'string') throw new Error(`Missing argument "${key}" (it must be a text value)`);
+    if (v.trim() === '' && !(MAY_BE_EMPTY[def.name] ?? []).includes(key)) {
+      throw new Error(`Empty argument "${key}"`);
+    }
+  }
 }
 
 // 4. RUN ONE TOOL. Returns text for the model. If something goes wrong it THROWS an error.
 // The agent loop (step 3) catches the error and sends its message back to the model as text,
 // so the model can see what went wrong and try something else. The loop never crashes because of a tool.
 export async function runTool(ctx: ToolContext, name: string, input: Record<string, unknown>): Promise<string> {
+  const def = TOOL_DEFS.find((t) => t.name === name);
+  if (!def) throw new Error(`Unknown tool "${name}"`);
+  validateInput(def, input); // after this line every required argument is known to be text
+
+  // Reads an argument. Safe to use for required arguments, because validateInput has already checked them.
+  const str = (key: string) => input[key] as string;
+
   switch (name) {
     case 'open_page': {
-      const url = str(input, 'url');
+      const url = str('url');
       assertAllowed(url, ctx.allowedHosts); // guard first, browser second
       await ctx.browser.open(url);
       return 'Page opened.';
@@ -117,23 +135,24 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
       return text.length > ctx.maxSnapshotChars ? text.slice(0, ctx.maxSnapshotChars) + '\n[truncated]' : text;
     }
     case 'click':
-      await ctx.browser.click(str(input, 'role'), str(input, 'name'));
+      await ctx.browser.click(str('role'), str('name'));
       return 'Clicked.';
     case 'fill':
-      // `text` may legitimately be empty (to clear a field), so it is not checked with str().
-      await ctx.browser.fill(str(input, 'label'), String(input.text ?? ''));
+      // `text` must be present, but "" is allowed: it clears the field (see MAY_BE_EMPTY above).
+      await ctx.browser.fill(str('label'), str('text'));
       return 'Filled.';
     case 'report_issue': {
       // All four fields are required, so a report always has steps, expected and actual results.
       ctx.issues.push({
-        title: str(input, 'title'),
-        steps: str(input, 'steps'),
-        expected: str(input, 'expected'),
-        actual: str(input, 'actual'),
+        title: str('title'),
+        steps: str('steps'),
+        expected: str('expected'),
+        actual: str('actual'),
       });
       return `Issue recorded (${ctx.issues.length} so far).`;
     }
     default:
+      // Not reachable while every tool in TOOL_DEFS has a case above (a test checks that).
       throw new Error(`Unknown tool "${name}"`);
   }
 }

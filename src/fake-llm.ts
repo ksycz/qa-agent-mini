@@ -11,6 +11,15 @@ export function toolCall(name: string, input: Record<string, unknown>, id = `cal
   return { content: [{ type: 'tool_use', id, name, input }], usage: { inputTokens: 100, outputTokens: 10 } };
 }
 
+// Builds a model answer that asks for SEVERAL tools in one reply (real models do this often).
+// Example: toolCalls([['fill', { label: 'Visitor age', text: '5' }], ['click', { role: 'button', name: 'Add visitor' }]])
+export function toolCalls(calls: [string, Record<string, unknown>][]): LlmResponse {
+  return {
+    content: calls.map(([name, input], i) => ({ type: 'tool_use' as const, id: `batch_${i}_${Math.random().toString(36).slice(2, 8)}`, name, input })),
+    usage: { inputTokens: 100, outputTokens: 10 },
+  };
+}
+
 // Builds a model answer with only text and no tool request. This is how a model says "I am finished".
 export function say(text: string): LlmResponse {
   return { content: [{ type: 'text', text }], usage: { inputTokens: 100, outputTokens: 10 } };

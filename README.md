@@ -47,6 +47,7 @@ Read the files in this order:
 10. `src/llm.ts`: how the code talks to a model (types only).
 11. `src/fake-llm.ts`: a pretend model that returns prepared answers.
 12. `src/agent.ts`: the agent loop and its limits. The most important file in the repo.
+    `src/stuck-guard.ts`: the one rule that notices when the agent goes round in circles (step 5).
 13. `src/loop-demo.ts`: the loop running with the fake model. Run it with `npm run loop`.
 14. `test/agent.test.ts`: how the loop is tested.
 15. `src/prompt.ts`: what we tell the model (the standing instructions and the task).
@@ -62,13 +63,37 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
 - [x] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
 - [x] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
-- [ ] **Step 5: guardrails and safety.** Prompt-injection canary on the page, tool errors returned to the model, API key handling.
+- [x] **Step 5: guardrails.** A smarter stuck guard (same call + same result + same page, with a warning before the stop) and a check of required tool arguments against the tool schema. Fixes issues #12 and #9.
+- [ ] **Step 5b: prompt-injection canary.** A planted instruction on the page (`--inject`) to see whether the agent obeys it, and API key handling.
 - [ ] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens, cost. Repeat runs, because LLMs vary.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
 - [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
 - [ ] **Step 9: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
+
+## Step 5: guardrails
+
+Two small fixes to things the first real runs showed us. Nothing new is added to the loop's shape.
+
+**1. The stuck guard no longer stops good tests (issue #12).** In runs 4, 5 and 6 the guard ended the run at the same place, when the model asked for
+three identical "Add visitor" clicks in one reply. The old rule only compared the calls, and it checked them before any result came back. Now:
+
+- `src/stuck-guard.ts`: "stuck" means the same call, the same result and the same page text afterwards, again and again.
+  Adding a visitor changes the page every time, so it is not stuck. Clicking a button that does nothing is.
+- The first time the model is stuck it is not stopped. A warning is added to the tool result it reads next.
+  It is stopped only if it repeats again in a later step.
+- `src/agent.ts`: after each tool call the loop takes a snapshot of the page (free: it is not sent to the model) and asks the guard.
+
+**2. A missing argument is an error, not an empty string (issue #9).** In run 2 the model called `fill` without `text`, and the call "succeeded" by clearing the field.
+`runTool` in `src/tools.ts` now checks the input against the tool's own definition in `TOOL_DEFS`. Missing or non-text arguments are refused with a message the model can read.
+Only `fill`'s `text` may be an empty string, because that is how a field is cleared.
+
+```bash
+npm run typecheck && npm test      # the new tests are in test/agent.test.ts and test/tools.test.ts
+```
+
+Nothing here was run against the real model yet. The effect on the agent is measured in the next step with a new baseline (v3), see [RESULTS.md](RESULTS.md).
 
 ## Step 4: the first real run
 

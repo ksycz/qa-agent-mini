@@ -10,7 +10,18 @@
 
 import type { LlmClient, Message, ToolResultBlock, ToolUseBlock } from './llm';
 import { TOOL_DEFS, runTool, type Issue, type ToolContext } from './tools';
+import { createStuckGuard, STUCK_WARNING } from './stuck-guard';
 import type { Trace } from './trace';
+
+// The text of the page right now. The stuck guard compares it before and after a call to see if anything changed.
+// Before the first page is opened there is nothing to read, so an error simply means "no page yet".
+async function pageText(tools: ToolContext): Promise<string> {
+  try {
+    return await tools.browser.snapshot();
+  } catch {
+    return '';
+  }
+}
 
 // The hard limits. All of them are checked by our code, not requested politely in the prompt.
 export type AgentLimits = {
@@ -18,7 +29,7 @@ export type AgentLimits = {
   tokenBudget: number; // stop when input + output tokens together exceed this
   maxTokensPerReply: number; // the longest single answer we accept from the model
   maxToolResultChars: number; // a tool result longer than this is cut (saves tokens)
-  maxRepeatedCalls: number; // the same call this many times in a row means the agent is stuck
+  maxRepeatedCalls: number; // the same call, result and page this many times in a row: first a warning, then a stop
 };
 
 export const DEFAULT_LIMITS: AgentLimits = {
@@ -66,9 +77,8 @@ export async function runAgent(args: {
   let steps = 0;
   let finalText = '';
 
-  // For the "stuck" detection: what was the previous tool call, and how many times in a row did it repeat?
-  let lastCall = '';
-  let repeated = 0;
+  // For the "stuck" detection (see src/stuck-guard.ts): it remembers the last calls and warns before it stops.
+  const guard = createStuckGuard(limits.maxRepeatedCalls);
 
   // Small helper: build the result when we stop, for whatever reason.
   const finish = (stopReason: StopReason): AgentResult => {
@@ -107,32 +117,38 @@ export async function runAgent(args: {
 
     // 5. Run every requested tool and collect the answers.
     const results: ToolResultBlock[] = [];
+    let stuck = false; // set when the stuck guard says the run must end
     for (const call of calls) {
-      // Stuck detection: the same tool with the same arguments, again and again.
-      const key = call.name + JSON.stringify(call.input);
-      repeated = key === lastCall ? repeated + 1 : 1;
-      lastCall = key;
-      if (repeated >= limits.maxRepeatedCalls) return finish('repeated_call');
-
       log?.(`step ${steps}: model asks ${call.name} ${JSON.stringify(call.input)}`);
+
+      // 5a. Run the tool. A failing tool does NOT crash the loop: we turn the error into text and mark it
+      // as an error. The model can read it and try something else. This is how agents recover.
+      let content: string;
+      let isError = false;
       try {
         const out = await runTool(tools, call.name, call.input);
         // Cut very long results so they do not eat the token budget.
-        const content = out.length > limits.maxToolResultChars ? out.slice(0, limits.maxToolResultChars) : out;
-        results.push({ type: 'tool_result', tool_use_id: call.id, content });
-        // The whole result the model received (already limited by maxToolResultChars), not a shortened copy.
-        // A cut-off trace hides what the model actually saw, and the trace is the main tool for debugging.
-        trace?.event('tool_call', { step: steps, name: call.name, input: call.input, result: content });
-        log?.(`         result: ${content.split('\n')[0]}${content.includes('\n') ? ' ...' : ''}`);
+        content = out.length > limits.maxToolResultChars ? out.slice(0, limits.maxToolResultChars) : out;
       } catch (e) {
         // A tool failed (blocked host, missing element, bad arguments...).
-        // We do NOT crash. We tell the model what went wrong, as text, and mark it as an error.
-        // The model can read it and try something else. This is how agents recover.
-        const content = `ERROR: ${e instanceof Error ? e.message : String(e)}`;
-        results.push({ type: 'tool_result', tool_use_id: call.id, content, is_error: true });
-        trace?.event('tool_error', { step: steps, name: call.name, input: call.input, error: content });
-        log?.(`         ${content.split('\n')[0]}`);
+        content = `ERROR: ${e instanceof Error ? e.message : String(e)}`;
+        isError = true;
       }
+
+      // 5b. Stuck detection. It needs the result AND the page after the call, so it runs only now
+      // (in step 3 it ran before the tool and could not tell "same click, page changed" from "same click, nothing happened").
+      const verdict = guard.check(steps, call.name + JSON.stringify(call.input), content, await pageText(tools));
+      if (verdict === 'warn') content += `\n${STUCK_WARNING}`; // the model reads this in its next step
+      if (verdict === 'stop') stuck = true;
+
+      // 5c. Record what the model will see. The trace gets the whole result (already limited by
+      // maxToolResultChars, warning included), not a shortened copy: the trace is the main tool for debugging.
+      results.push({ type: 'tool_result', tool_use_id: call.id, content, ...(isError ? { is_error: true } : {}) });
+      if (isError) trace?.event('tool_error', { step: steps, name: call.name, input: call.input, error: content });
+      else trace?.event('tool_call', { step: steps, name: call.name, input: call.input, result: content });
+      log?.(isError ? `         ${content.split('\n')[0]}` : `         result: ${content.split('\n')[0]}${content.includes('\n') ? ' ...' : ''}`);
+
+      if (stuck) return finish('repeated_call');
     }
 
     // 6. Give the results back to the model as the next "user" message. Then the loop goes round again.

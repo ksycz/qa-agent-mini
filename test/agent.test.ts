@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { runAgent, type AgentLimits } from '../src/agent';
 import type { BrowserPort } from '../src/browser';
-import { say, scriptedLlm, toolCall } from '../src/fake-llm';
+import { say, scriptedLlm, toolCall, toolCalls } from '../src/fake-llm';
 import type { LlmClient } from '../src/llm';
 import { memoryTrace } from '../src/trace';
 
@@ -102,10 +102,56 @@ describe('agent loop', () => {
     expect(r.stopReason).toBe('token_budget');
   });
 
-  it('stops when the same call repeats', async () => {
-    const stuck: LlmClient = { complete: async () => toolCall('snapshot', {}) };
+  // STUCK DETECTION (src/stuck-guard.ts). "Stuck" = the same call, the same result and the same page, again and again.
+  // The model gets one warning first. It is stopped only if it keeps repeating after it could read the warning.
+  it('warns first and stops only when the model ignores the warning', async () => {
+    const stuck = scriptedLlm([toolCall('snapshot', {})]); // the script runs out, so it repeats the same answer forever
     const r = await run(stuck);
     expect(r.stopReason).toBe('repeated_call');
+    expect(r.steps).toBe(4); // steps 1 and 2 are fine, step 3 gets the warning, step 4 repeats anyway
+    // The 4th request to the model must contain the warning inside the last tool result.
+    const lastMessage = stuck.requests[3].messages.at(-1)!;
+    expect(JSON.stringify(lastMessage.content)).toContain('WARNING');
+    // ...and the 3rd request (before the warning existed) must not.
+    expect(JSON.stringify(stuck.requests[2].messages.at(-1)!.content)).not.toContain('WARNING');
+  });
+
+  it('does not stop a model that reacts to the warning', async () => {
+    const r = await run(
+      scriptedLlm([
+        toolCall('snapshot', {}),
+        toolCall('snapshot', {}),
+        toolCall('snapshot', {}), // third identical call: the warning is added to this result
+        toolCall('click', { role: 'button', name: 'Add visitor' }), // the model does something different
+        say('end'),
+      ]),
+    );
+    expect(r.stopReason).toBe('done');
+    expect(r.steps).toBe(5);
+  });
+
+  // Issue #12: several identical clicks in ONE reply used to end the run before any result came back.
+  // Clicking "Add visitor" again and again is a good test, because the page changes every time.
+  it('does not call identical clicks stuck when the page changes each time', async () => {
+    let tickets = 0;
+    const browser = { ...fakeBrowser(), click: async () => void tickets++, snapshot: async () => `tickets: ${tickets}` };
+    const click: [string, Record<string, unknown>] = ['click', { role: 'button', name: 'Add visitor' }];
+    const r = await runAgent({
+      llm: scriptedLlm([toolCalls([click, click, click, click]), say('end')]),
+      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      system: 'system',
+      task: 'task',
+    });
+    expect(r.stopReason).toBe('done');
+    expect(tickets).toBe(4); // all four clicks really happened
+  });
+
+  it('does not stop in the same step in which it warned, because the model has not read the warning yet', async () => {
+    const same: [string, Record<string, unknown>] = ['snapshot', {}]; // the page never changes
+    const llm = scriptedLlm([toolCalls([same, same, same, same, same]), say('end')]);
+    const r = await run(llm);
+    expect(r.stopReason).toBe('done'); // the 3rd call warned; the 4th and 5th are in the same step, so no stop
+    expect(r.steps).toBe(2);
   });
 
   it('writes every step to the trace', async () => {
