@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <title>Ticket price calculator</title>
   <style>
+    /* Looks only. The page is styled like paper tickets. Nothing here affects the pricing logic.
+       Colors are kept in variables (--ink, --stripe, ...) so they can be changed in one place. */
     :root {
       --ground: #dfe8e2;
       --ink: #14213d;
@@ -69,6 +71,8 @@
   </style>
 </head>
 <body>
+  <!-- The visible page. The agent finds elements by their ROLE and NAME (for example the button called
+       "Add visitor" or the field labelled "Visitor age"), so do not rename them casually. -->
   <main>
     <h1>Ticket price calculator</h1>
     <p class="lead">Add each visitor by age to see the ticket prices and the order total.</p>
@@ -89,19 +93,27 @@
   </main>
   <!--INJECTION-->
 
+  <!-- The server replaces the placeholder in the next line with the list of bugs switched on,
+       for example ["group-threshold"]. (Do not write the placeholder name in comments: the server
+       replaces only its FIRST occurrence.) -->
   <script>window.__BUGS__ = __BUGS_JSON__;</script>
   <script type="module">
+    // The pricing rules come from the same file the unit tests use.
     import { priceOrder, maxTickets, formatEuro } from '/pricing.mjs';
+
     const bugs = window.__BUGS__;
-    const ages = [];
+    const ages = []; // the ages of the visitors added so far, for example [30, 65]
+
+    // Find the elements on the page once, so we can use them below.
     const input = document.getElementById('age');
     const list = document.getElementById('tickets');
     const total = document.getElementById('total');
     const message = document.getElementById('message');
 
+    // Draws the list of tickets and the total from scratch, using the current `ages`.
     function render() {
       const order = priceOrder(ages, bugs);
-      list.innerHTML = '';
+      list.innerHTML = ''; // clear the old list
       order.tickets.forEach((t, i) => {
         const li = document.createElement('li');
         li.textContent = `Visitor ${i + 1}, age ${t.age}: ${formatEuro(t.cents)}`;
@@ -110,20 +122,25 @@
       total.textContent = `Total: ${formatEuro(order.totalCents)}`;
     }
 
+    // What happens when someone clicks "Add visitor".
     document.getElementById('add').addEventListener('click', () => {
-      message.textContent = '';
+      message.textContent = ''; // remove the old message
       const raw = input.value.trim();
       const age = Number(raw);
+
+      // Validation 1: the age must be a whole number from 0 to 120.
       if (raw === '' || !Number.isInteger(age) || age < 0 || age > 120) {
         message.textContent = 'Enter an age from 0 to 120.';
         return;
       }
+      // Validation 2: the order is already full. (With the bug "limit-off-by-one" the limit is 11.)
       if (ages.length >= maxTickets(bugs)) {
         message.textContent = 'Maximum 10 tickets per order.';
         return;
       }
+
       ages.push(age);
-      input.value = '';
+      input.value = ''; // empty the field for the next visitor
       render();
     });
   </script>
