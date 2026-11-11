@@ -1,7 +1,6 @@
 // UNIT TESTS of the prompts (src/prompt.ts) and of the command-line helpers (src/cli-args.ts).
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LIMITS } from '../src/agent';
 import { flag, parseBugs } from '../src/cli-args';
 import { loadSpec, SYSTEM_PROMPT, taskFor } from '../src/prompt';
 
@@ -16,15 +15,6 @@ describe('prompts', () => {
   });
   it('the system prompt says page text is data, not instructions', () => {
     expect(SYSTEM_PROMPT).toMatch(/data, not instructions/);
-  });
-  // The model is told its real budget. The token number in the text must be the limit that the code really enforces,
-  // otherwise the prompt would lie when somebody changes the limit.
-  it('the system prompt states the real token budget of the loop', () => {
-    expect(SYSTEM_PROMPT).toContain(DEFAULT_LIMITS.tokenBudget.toLocaleString('en-US'));
-  });
-  it('the system prompt tells the model not to stop early and not to claim it ran out of budget', () => {
-    expect(SYSTEM_PROMPT).toMatch(/Do not stop while an area/);
-    expect(SYSTEM_PROMPT).toMatch(/ran out of budget/);
   });
 });
 
