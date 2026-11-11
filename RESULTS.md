@@ -16,6 +16,29 @@ How to read the table:
 | [2](results/run-02-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs | none (repeat of run 1, to see how much runs differ) | 2 of 3 | 0 | 14 | 80,826 / 6,937 | token budget (80,000) |
 | [3](results/run-03-output.txt) | 2026-11-11 | claude-haiku-5-5 | no bugs | none (same prompt, correct page, to measure false alarms) | n/a (0 bugs exist) | 0 | 13 | 82,721 / 5,976 | token budget (80,000) |
 
+## Baseline v2: page with "Clear order" and a full trace
+
+The page changed (PR #11: "Clear order" button, new section in `SPEC.md`) and the trace now keeps whole results (PR #10).
+Runs 1 to 3 above belong to the old page, so a new baseline is measured with three runs on `--bugs=all`. Rows are added as the runs come in.
+
+| Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Stopped because |
+|---|---|---|---|---|---|---|---|---|---|
+| [4](results/run-04-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 8 | 33,558 / 3,886 | 0 | repeated call (issue #12) |
+| 5 | | | | | | | | | |
+| 6 | | | | | | | | | |
+
+### Run 4 (baseline v2, first run)
+
+**Found:** `senior-discount`. **Missed:** `group-threshold` and `limit-off-by-one`. The agent never had more than 5 tickets in one order, so it never reached the group discount (8) or the limit (10).
+
+**The new button was used well:** the agent clicked "Clear order" three times (steps 5, 7 and 8) and did not reload the page after the first load. In runs 1 to 3 it reloaded 2 to 3 times.
+
+**Fewer steps and tokens, but not a fair comparison yet:** 8 steps and about 37,400 tokens, against 13 to 14 steps and about 88,000 before.
+Part of the saving is real (no reloads and no re-adding of visitors). Part is only because the run was cut short: it stopped on `repeated_call` at step 8 of 25,
+before the interesting tests. The stop is tracked in issue #12: the guard fired on three identical "Add visitor" clicks in one reply, before the model could see any result.
+
+Wait for runs 5 and 6 before concluding anything. One run is not a baseline.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
@@ -82,8 +105,8 @@ So the model drops an argument from time to time, and the quality of the tool er
 3. Cost: prompt caching for the part that repeats (system prompt, spec, tools).
 4. Efficiency: a smaller snapshot, or fewer snapshots per step.
 5. Tools: check required arguments against the tool schema, so a missing argument is an error the model can read.
-6. Prompt: tell the agent that a reload is expensive and that the order is empty only after a reload. Or remove the reason for reloading: a "Clear order" button on the page, or a `reset` tool.
-7. Trace: `tool_call` events keep only the first 500 characters of a tool result, so long snapshots are cut (the ticket list above was cut in the middle). Store the whole result in the trace, it is the main debugging tool.
+6. Prompt: tell the agent that a reload is expensive and that the order is empty only after a reload. Or remove the reason for reloading: a "Clear order" button on the page, or a `reset` tool. Done: the button, in PR #11.
+7. Trace: `tool_call` events keep only the first 500 characters of a tool result, so long snapshots are cut (the ticket list above was cut in the middle). Store the whole result in the trace, it is the main debugging tool. Done in PR #10.
 8. Measurement: because coverage differs between runs, judge every change by at least 3 runs, not one. This is what the eval in step 6 automates.
 
 Change one thing per run, so the table shows what helped.
