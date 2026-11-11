@@ -1,0 +1,131 @@
+// THE AGENT LOOP. This is the heart of an agent, and it is surprisingly small.
+//
+// The idea in plain words:
+//   1. Give the model the task and the menu of tools.
+//   2. The model answers. If it asks for tools, WE run them and give the results back. Go to 2.
+//   3. If the model answers without asking for a tool, it is finished.
+//
+// The model only decides what to do next. Our code does everything else, and it enforces LIMITS,
+// because a loop that talks to a paid model must never be able to run forever.
+
+import type { LlmClient, Message, ToolResultBlock, ToolUseBlock } from './llm';
+import { TOOL_DEFS, runTool, type Issue, type ToolContext } from './tools';
+
+// The hard limits. All of them are checked by our code, not requested politely in the prompt.
+export type AgentLimits = {
+  maxSteps: number; // at most this many calls to the model
+  tokenBudget: number; // stop when input + output tokens together exceed this
+  maxTokensPerReply: number; // the longest single answer we accept from the model
+  maxToolResultChars: number; // a tool result longer than this is cut (saves tokens)
+  maxRepeatedCalls: number; // the same call this many times in a row means the agent is stuck
+};
+
+export const DEFAULT_LIMITS: AgentLimits = {
+  maxSteps: 25,
+  tokenBudget: 80_000,
+  maxTokensPerReply: 1000,
+  maxToolResultChars: 6000,
+  maxRepeatedCalls: 3,
+};
+
+// Why the loop ended. 'done' is the only happy ending: the model decided it was finished.
+export type StopReason = 'done' | 'max_steps' | 'token_budget' | 'repeated_call';
+
+// What the loop returns: the problems found, and numbers to measure the run (used by the eval later).
+export type AgentResult = {
+  issues: Issue[];
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  stopReason: StopReason;
+  finalText: string; // the last thing the model said (usually a short summary)
+};
+
+export async function runAgent(args: {
+  llm: LlmClient; // the brain: a fake in tests, a real model later
+  tools: ToolContext; // the hands from step 2 (browser, allowed hosts, ...)
+  system: string; // standing instructions for the model
+  task: string; // what to do right now
+  limits?: Partial<AgentLimits>; // override some of the default limits
+  log?: (line: string) => void; // optional: print what happens (used by the demo)
+}): Promise<AgentResult> {
+  const { llm, tools, system, task, log } = args;
+  const limits = { ...DEFAULT_LIMITS, ...args.limits };
+
+  // The conversation so far. It starts with the task and grows with every step.
+  const messages: Message[] = [{ role: 'user', content: task }];
+
+  // Counters for the result.
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let steps = 0;
+  let finalText = '';
+
+  // For the "stuck" detection: what was the previous tool call, and how many times in a row did it repeat?
+  let lastCall = '';
+  let repeated = 0;
+
+  // Small helper: build the result when we stop, for whatever reason.
+  const finish = (stopReason: StopReason): AgentResult => {
+    log?.(`STOP: ${stopReason} after ${steps} step(s), tokens in/out: ${inputTokens}/${outputTokens}`);
+    return { issues: tools.issues, steps, inputTokens, outputTokens, stopReason, finalText };
+  };
+
+  // THE LOOP. It can only run while we are below the step limit.
+  while (steps < limits.maxSteps) {
+    steps++;
+
+    // 1. Ask the model what to do next. It sees the whole conversation so far.
+    const reply = await llm.complete({ system, tools: TOOL_DEFS, messages, maxTokens: limits.maxTokensPerReply });
+    inputTokens += reply.usage.inputTokens;
+    outputTokens += reply.usage.outputTokens;
+
+    // Remember the text part of the answer, and find the tool requests in it.
+    finalText = reply.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');
+    const calls = reply.content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+
+    // 2. No tool requested = the model considers itself finished. This is the normal ending.
+    if (calls.length === 0) {
+      log?.(`step ${steps}: model says: ${finalText}`);
+      return finish('done');
+    }
+
+    // 3. Safety: out of token budget? Stop now, before spending more.
+    if (inputTokens + outputTokens > limits.tokenBudget) return finish('token_budget');
+
+    // 4. Add the model's answer to the conversation, so the next call sees what it asked for.
+    messages.push({ role: 'assistant', content: reply.content });
+
+    // 5. Run every requested tool and collect the answers.
+    const results: ToolResultBlock[] = [];
+    for (const call of calls) {
+      // Stuck detection: the same tool with the same arguments, again and again.
+      const key = call.name + JSON.stringify(call.input);
+      repeated = key === lastCall ? repeated + 1 : 1;
+      lastCall = key;
+      if (repeated >= limits.maxRepeatedCalls) return finish('repeated_call');
+
+      log?.(`step ${steps}: model asks ${call.name} ${JSON.stringify(call.input)}`);
+      try {
+        const out = await runTool(tools, call.name, call.input);
+        // Cut very long results so they do not eat the token budget.
+        const content = out.length > limits.maxToolResultChars ? out.slice(0, limits.maxToolResultChars) : out;
+        results.push({ type: 'tool_result', tool_use_id: call.id, content });
+        log?.(`         result: ${content.split('\n')[0]}${content.includes('\n') ? ' ...' : ''}`);
+      } catch (e) {
+        // A tool failed (blocked host, missing element, bad arguments...).
+        // We do NOT crash. We tell the model what went wrong, as text, and mark it as an error.
+        // The model can read it and try something else. This is how agents recover.
+        const content = `ERROR: ${e instanceof Error ? e.message : String(e)}`;
+        results.push({ type: 'tool_result', tool_use_id: call.id, content, is_error: true });
+        log?.(`         ${content.split('\n')[0]}`);
+      }
+    }
+
+    // 6. Give the results back to the model as the next "user" message. Then the loop goes round again.
+    messages.push({ role: 'user', content: results });
+  }
+
+  // We left the loop because we ran out of steps.
+  return finish('max_steps');
+}

@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "target": "tsx src/serve-target.ts",
-    "hands": "tsx src/hands.ts"
+    "hands": "tsx src/hands.ts",
+    "loop": "tsx src/loop-demo.ts"
   },
   "license": "MIT",
   "dependencies": {
