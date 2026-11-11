@@ -24,7 +24,7 @@ Runs 1 to 3 above belong to the old page, so a new baseline is measured with thr
 | Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Stopped because |
 |---|---|---|---|---|---|---|---|---|---|
 | [4](results/run-04-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 8 | 33,558 / 3,886 | 0 | repeated call (issue #12) |
-| 5 | | | | | | | | | |
+| [5](results/run-05-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 8 | 30,044 / 3,231 | 0 | repeated call (issue #12) |
 | 6 | | | | | | | | | |
 
 ### Run 4 (baseline v2, first run)
@@ -37,7 +37,14 @@ Runs 1 to 3 above belong to the old page, so a new baseline is measured with thr
 Part of the saving is real (no reloads and no re-adding of visitors). Part is only because the run was cut short: it stopped on `repeated_call` at step 8 of 25,
 before the interesting tests. The stop is tracked in issue #12: the guard fired on three identical "Add visitor" clicks in one reply, before the model could see any result.
 
-Wait for runs 5 and 6 before concluding anything. One run is not a baseline.
+### Run 5 (baseline v2, second run)
+
+Same result as run 4: only `senior-discount` found, 0 false alarms, 0 reloads, stopped by `repeated_call` after 8 steps (30,044 / 3,231 tokens).
+Step 8 was again: click "Clear order", fill 30, click "Add visitor" twice. The third identical click triggered the guard.
+Both v2 runs ended at the same point, so the guard (issue #12) is systematic. The agent never had more than 5 tickets, so neither the group discount (8) nor the limit (10) was reached.
+
+**Conclusion so far:** baseline v2 mainly measures the guard, not the agent's coverage. A third identical run would add little.
+Better plan: fix issue #12 (and #9), then measure a baseline v3 with 3 runs. Run 6 is left empty on purpose.
 
 ## Summary of runs 1 and 2
 
