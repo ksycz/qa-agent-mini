@@ -19,13 +19,13 @@ How to read the table:
 ## Baseline v2: page with "Clear order" and a full trace
 
 The page changed (PR #11: "Clear order" button, new section in `SPEC.md`) and the trace now keeps whole results (PR #10).
-Runs 1 to 3 above belong to the old page, so a new baseline is measured with three runs on `--bugs=all`. Rows are added as the runs come in.
+Runs 1 to 3 above belong to the old page, so a new baseline is measured with three runs on `--bugs=all`. Rows are added as the runs come in (runs 4 to 6).
 
 | Run | Date | Model | Page | Bugs found | False alarms | Steps | Tokens (in / out) | Reloads | Stopped because |
 |---|---|---|---|---|---|---|---|---|---|
 | [4](results/run-04-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 8 | 33,558 / 3,886 | 0 | repeated call (issue #12) |
 | [5](results/run-05-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 8 | 30,044 / 3,231 | 0 | repeated call (issue #12) |
-| 6 | | | | | | | | | |
+| [6](results/run-06-output.txt) | 2026-11-11 | claude-haiku-5-5 | all 3 bugs, v2 | 1 of 3 | 0 | 9 | 36,168 / 4,105 | 0 | repeated call (issue #12) |
 
 ### Run 4 (baseline v2, first run)
 
@@ -43,8 +43,27 @@ Same result as run 4: only `senior-discount` found, 0 false alarms, 0 reloads, s
 Step 8 was again: click "Clear order", fill 30, click "Add visitor" twice. The third identical click triggered the guard.
 Both v2 runs ended at the same point, so the guard (issue #12) is systematic. The agent never had more than 5 tickets, so neither the group discount (8) nor the limit (10) was reached.
 
-**Conclusion so far:** baseline v2 mainly measures the guard, not the agent's coverage. A third identical run would add little.
-Better plan: fix issue #12 (and #9), then measure a baseline v3 with 3 runs. Run 6 is left empty on purpose.
+### Run 6 (baseline v2, third run)
+
+**Found:** `senior-discount` (reported at step 8, after testing ages 65 and 66). **Missed:** `group-threshold` and `limit-off-by-one`. 0 false alarms, 0 reloads.
+It stopped on `repeated_call` after 9 steps (36,168 / 4,105 tokens).
+
+**Same stop as runs 4 and 5.** Step 9 was: fill 30, then "Add visitor" three times in one reply. The guard counts identical calls in a row
+(`maxRepeatedCalls: 3` in `src/agent.ts`) and fires on the third one, before any result comes back. The terminal output shows only two clicks
+because the guard returns before the third call is logged. This is issue #12 again.
+
+**One difference from runs 4 and 5:** this time the agent did build an order of 8 tickets (ages 30, 0, 5, 6, 17, 18, 64, 65 in steps 2 to 5),
+which is the size where the group discount should apply. It did not report `group-threshold`.
+The terminal output hides the page snapshots (`- main: ...`), so from the paste alone I cannot say whether the snapshot showed a missing discount that the model overlooked,
+or whether the model never looked at the total. The answer is in the trace (`runs/2026-11-11T16-42-27-746Z/`, kept only on the local machine). Not checked yet.
+The 10-ticket limit was not reached in this run.
+
+## Conclusion of baseline v2
+
+Three runs, three times the same stop: only `senior-discount` found, 0 false alarms, 0 reloads, 8 to 9 steps, 30,000 to 36,000 input tokens.
+The guard (issue #12) ends every run in the same place, before the limit (10 tickets) is reached. So baseline v2 mainly measures the guard, not the agent's coverage.
+Run 6 adds one open question: an order of 8 tickets was built, but the group discount was not reported. It is not yet clear if that is a coverage problem or a reading problem.
+Better plan: fix issue #12 (and #9), then measure a baseline v3 with 3 runs.
 
 ## Summary of runs 1 and 2
 
