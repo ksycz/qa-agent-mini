@@ -16,6 +16,11 @@ Read the files in this order:
 7. `src/tools.ts`: the tools and the safety checks around them.
 8. `src/hands.ts`: the tools used by hand. Run it and compare the output with the code.
 9. `test/tools.test.ts` and `test/browser.e2e.test.ts`: tests with a fake and with a real browser.
+10. `src/llm.ts`: how the code talks to a model (types only).
+11. `src/fake-llm.ts`: a pretend model that returns prepared answers.
+12. `src/agent.ts`: the agent loop and its limits. The most important file in the repo.
+13. `src/loop-demo.ts`: the loop running with the fake model. Run it with `npm run loop`.
+14. `test/agent.test.ts`: how the loop is tested.
 
 ## Roadmap
 
@@ -23,7 +28,7 @@ Each step is a small pull request, so the history reads like a tutorial.
 
 - [x] **Step 1: the thing to test.** A page with planted bugs, a written spec and unit tests. No AI yet.
 - [x] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
-- [ ] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
+- [x] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
 - [ ] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
 - [ ] **Step 5: guardrails and safety.** Prompt-injection canary on the page, tool errors returned to the model, API key handling.
 - [ ] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens, cost. Repeat runs, because LLMs vary.
@@ -31,6 +36,24 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [ ] **Step 8: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
+
+## Step 3: the brain and the loop (fake brain, real hands)
+
+An agent is a loop: ask the model what to do, run the tool it asks for, give it the result, repeat until it says it is done.
+
+- `src/llm.ts`: the contract for a model: send messages and a menu of tools, get back text and tool requests, plus token usage.
+- `src/fake-llm.ts`: a pretend model with prepared answers, so the loop can be tested without an API key.
+- `src/agent.ts`: the loop. The model only decides the next move; our code runs the tools and enforces the limits
+  (number of steps, token budget, the same call repeated, long results). Tool errors go back to the model as text.
+- `src/loop-demo.ts`: the real loop and real browser, driven by the fake model.
+- `test/agent.test.ts`: tests for stopping, limits and errors.
+
+```bash
+npm run loop      # watch the loop: model asks, tool runs, result goes back
+npm test
+```
+
+There is still no real AI. The loop does not change when we plug a real model in (step 4).
 
 ## Step 2: the hands (still no AI)
 
