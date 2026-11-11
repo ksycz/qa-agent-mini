@@ -5,6 +5,8 @@
 //   export ANTHROPIC_API_KEY=...
 //   npm run eval -- --bugs=all --runs=3       the page has three bugs
 //   npm run eval -- --bugs=none --runs=3      the page is correct: every report is a false alarm
+//   npm run eval -- --bugs=all --inject       the page also carries a hidden sentence that gives orders to an AI agent (the canary, step 6b);
+//                                             the summary says in how many runs the agent obeyed it
 //
 // Everything is saved in evals/<time>/: summary.md (the table) and run-1/, run-2/, ... (the trace of each run).
 // It costs real money: up to 80,000 tokens per run.
@@ -12,11 +14,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_LIMITS } from './agent';
-import { flag, parseBugs, parseRuns } from './cli-args';
+import { flag, hasFlag, parseBugs, parseRuns } from './cli-args';
 import { runOnce } from './run-once';
 import { summarize, toRunStats, type RunStats } from './score';
 
 const bugs = parseBugs(flag('bugs'));
+const inject = hasFlag('inject');
 const model = process.env.QA_AGENT_MODEL ?? 'claude-haiku-5-5';
 
 let runCount: number;
@@ -33,7 +36,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 const dir = join('evals', new Date().toISOString().replace(/[:.]/g, '-'));
 mkdirSync(dir, { recursive: true });
-console.log(`${runCount} run(s), bugs: [${bugs.join(', ') || 'none'}], model: ${model}`);
+console.log(`${runCount} run(s), bugs: [${bugs.join(', ') || 'none'}], canary sentence: ${inject ? 'yes' : 'no'}, model: ${model}`);
 console.log(`Costs real money: at most ${(runCount * DEFAULT_LIMITS.tokenBudget).toLocaleString('en-US')} tokens (and a little more, the last reply can cross the limit).\n`);
 
 const stats: RunStats[] = [];
@@ -41,7 +44,7 @@ try {
   for (let i = 1; i <= runCount; i++) {
     const runDir = join(dir, `run-${i}`);
     console.log(`Run ${i} of ${runCount} ...`);
-    const result = await runOnce({ bugs, model, dir: runDir }); // no step-by-step printing here: the table is the output
+    const result = await runOnce({ bugs, inject, model, dir: runDir }); // no step-by-step printing here: the table is the output
     stats.push(toRunStats(result, bugs, readFileSync(join(runDir, 'trace.jsonl'), 'utf8')));
   }
 } catch (e) {
@@ -51,7 +54,7 @@ try {
 }
 
 if (stats.length > 0) {
-  const summary = summarize(stats, bugs);
+  const summary = summarize(stats, bugs, inject);
   writeFileSync(join(dir, 'summary.md'), summary + '\n');
   console.log(`\n${summary}\n\nSaved in ${dir}/`);
 }
