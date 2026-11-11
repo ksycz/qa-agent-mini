@@ -49,6 +49,10 @@ Read the files in this order:
 12. `src/agent.ts`: the agent loop and its limits. The most important file in the repo.
 13. `src/loop-demo.ts`: the loop running with the fake model. Run it with `npm run loop`.
 14. `test/agent.test.ts`: how the loop is tested.
+15. `src/prompt.ts`: what we tell the model (the standing instructions and the task).
+16. `src/trace.ts`: the written record of a run.
+17. `src/run.ts`: the first real run. The only file that starts everything together.
+18. `src/llm.ts` again, the bottom part: the one place that calls the Anthropic API.
 
 ## Roadmap
 
@@ -57,7 +61,7 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 1: the thing to test.** A page with planted bugs, a written spec and unit tests. No AI yet.
 - [x] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
 - [x] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
-- [ ] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
+- [x] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
 - [ ] **Step 5: guardrails and safety.** Prompt-injection canary on the page, tool errors returned to the model, API key handling.
 - [ ] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens, cost. Repeat runs, because LLMs vary.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
@@ -65,6 +69,34 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [ ] **Step 9: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
+
+## Step 4: the first real run
+
+The loop from step 3 stays exactly the same. We replace the fake model with a real one and give it a task.
+
+- `src/llm.ts`: now also contains the real client. It is the only code that calls the Anthropic API.
+- `src/prompt.ts`: the system prompt (who the model is and how it must work) and the task. The task contains the page address and
+  the text of `SPEC.md`, so the human, the agent and the repo all use the same spec.
+- `src/trace.ts`: writes every model answer, tool call and error to `runs/<time>/trace.jsonl`.
+- `src/run.ts`: starts the page and the browser, runs the agent, prints the issues it found.
+
+You need an API key from https://console.anthropic.com and a little credit. Keep the key out of files:
+
+```bash
+export ANTHROPIC_API_KEY=your-key        # only in this terminal window
+npm run agent -- --bugs=all              # the page has three bugs
+npm run agent -- --bugs=none             # the page is correct: a good agent reports nothing
+```
+
+What to look at after a run:
+
+1. The printed issues. Which of the three bugs did it find? Did it report anything that is not a bug (a false alarm)?
+2. `runs/<time>/trace.jsonl`. Follow the run line by line: what did the model ask for, what did it get back?
+3. The last line of the output: how many steps and tokens did the run use, and why did it stop?
+
+Runs are not identical. Run it three times and write down what changed. Try `QA_AGENT_MODEL=<another model> npm run agent`.
+
+The first version of the prompt is a first guess. Improving it, and measuring whether the change helped, is what steps 5 and 6 are for.
 
 ## Step 3: the brain and the loop (fake brain, real hands)
 

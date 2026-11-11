@@ -9,6 +9,7 @@ import { runAgent, type AgentLimits } from '../src/agent';
 import type { BrowserPort } from '../src/browser';
 import { say, scriptedLlm, toolCall } from '../src/fake-llm';
 import type { LlmClient } from '../src/llm';
+import { memoryTrace } from '../src/trace';
 
 // A fake browser that only writes down what it was asked to do.
 function fakeBrowser(log: string[] = []): BrowserPort {
@@ -105,5 +106,20 @@ describe('agent loop', () => {
     const stuck: LlmClient = { complete: async () => toolCall('snapshot', {}) };
     const r = await run(stuck);
     expect(r.stopReason).toBe('repeated_call');
+  });
+
+  it('writes every step to the trace', async () => {
+    const trace = memoryTrace();
+    await runAgent({
+      llm: scriptedLlm([toolCall('open_page', { url: 'https://evil.example/' }), toolCall('snapshot', {}), say('end')]),
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      system: 'system',
+      task: 'task',
+      trace,
+    });
+    // start, then for each step: the model reply and the tool outcome, and finally the stop.
+    expect(trace.events.map((e) => e.type)).toEqual([
+      'start', 'model_reply', 'tool_error', 'model_reply', 'tool_call', 'model_reply', 'stop',
+    ]);
   });
 });

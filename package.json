@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit",
     "target": "tsx src/serve-target.ts",
     "hands": "tsx src/hands.ts",
-    "loop": "tsx src/loop-demo.ts"
+    "loop": "tsx src/loop-demo.ts",
+    "agent": "tsx src/run.ts"
   },
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "playwright": "^1.65.0"
   },
   "devDependencies": {
