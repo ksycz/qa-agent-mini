@@ -33,4 +33,14 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     // The spec says €10.00 for a senior. With the bug on, the page shows €15.00.
     expect(await browser.snapshot()).toContain('€15.00');
   });
+
+  it('Clear order empties the order', async () => {
+    await browser.open(target.url);
+    await browser.fill('Visitor age', '30');
+    await browser.click('button', 'Add visitor');
+    await browser.click('button', 'Clear order');
+    const page = await browser.snapshot();
+    expect(page).toContain('Total: €0.00');
+    expect(page).not.toContain('Visitor 1');
+  });
 });
