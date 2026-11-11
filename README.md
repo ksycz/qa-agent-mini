@@ -52,7 +52,8 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [ ] **Step 5: guardrails and safety.** Prompt-injection canary on the page, tool errors returned to the model, API key handling.
 - [ ] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens, cost. Repeat runs, because LLMs vary.
 - [ ] **Step 7: CI.** Typecheck and unit tests on every pull request. No API key in CI.
-- [ ] **Step 8: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
+- [ ] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measure with the eval whether the agent finds more bugs, or spends fewer tokens, with the skill than without it.
+- [ ] **Step 9: make it better.** Prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
