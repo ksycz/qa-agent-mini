@@ -27,8 +27,7 @@ The goal of this repo is to understand how an agent is built: the tools, the loo
 A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
 This is a learning project, not a replacement for the Playwright agents.
 
-**Where we are:** the page, the tools and the agent loop exist and are tested with a fake model. The real model comes in step 4 (see the roadmap below).
-
+**Where we are:** the agent works end to end with a real model, and every change since step 5 has been measured with the eval (`npm run eval`). The page has three planted bugs; the agent finds them in most runs. What we learned is collected in "Lessons so far" below, and the open ideas are in the last roadmap item.
 
 ## How to read this repo
 
@@ -57,32 +56,133 @@ Read the files in this order:
 19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored.
 20. `.github/workflows/ci.yml`: what runs on every pull request (step 7).
 21. `src/skills.ts` and `skills/boundary-value-testing/SKILL.md`: the skills (step 8).
+22. `src/trim-snapshots.ts`: cuts old page snapshots out of what the model sees (step 6c). `src/cli-args.ts`: reads the options `--bugs`, `--runs` and `--inject`.
+23. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 
 ## Roadmap
 
-Each step is a small pull request, so the history reads like a tutorial.
+Each step is a small pull request, so the history reads like a tutorial. Every entry is short on purpose: the details are in the section of the step below and the measurements in [RESULTS.md](RESULTS.md).
 
 - [x] **Step 1: the thing to test.** A page with planted bugs, a written spec and unit tests. No AI yet.
 - [x] **Step 2: the hands.** A browser wrapper and a few tools (open page, snapshot, click, fill, report issue) with an allowed-hosts check. Run them by hand with `npm run hands`.
 - [x] **Step 3: the brain and the loop.** A small interface for the LLM and the agent loop with hard limits (steps, tokens, repeated calls). Tested with a fake LLM, so no API key and no cost.
 - [x] **Step 4: the first real run.** System prompt, the spec as the task, a trace file of everything the agent did. First `npm run agent` against the buggy page.
-- [x] **Step 5: guardrails.** A smarter stuck guard (same call + same result + same page, with a warning before the stop) and a check of required tool arguments against the tool schema. Fixes issues #12 and #9.
-- [x] **Step 5a: seeing and fixing what the runs showed** (pull requests after step 5, no new feature). Baseline v2 and v3 in `RESULTS.md` (runs 4 to 10), the trace records the model, the bugs and why each reply ended (issue #17),
-  and the loop handles cut-off replies and runs the tools of the last reply before the budget stop (issues #18 and #20).
-- [x] **Step 6: eval.** Score runs against the three planted bugs: detection rate, false positives, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
-- [x] **Step 6c: first improvement, measured with the eval: trimming old page snapshots.** The model sees in full only the snapshots of the latest round (the results of its last reply), so every step sends fewer input tokens. Measured: about 24% fewer tokens per step, no clear loss in bugs found, but no more bugs found either, and the traces showed a flaw (the model does not see the earlier snapshots of the same reply). The fix (keep all snapshots of the latest round, not only the single newest one) is in the section "Step 6c, fixed" in `RESULTS.md`, which also has the plan and the guesses.
-- [x] **Step 6d: tried and not kept: a prompt that states the budget.** The model was told it had about 14 steps and 80,000 tokens. It read the number as a target and stopped early in 5 of 6 runs (see `RESULTS.md`), so the change was reverted. What we learned is in the section "Step 6d" below.
-- [x] **Step 6e: a tool that adds several visitors in one call.** `add_visitors` with ages like "30, 65, 8": our code does the fill and click for each age, so a ticket no longer costs the model two calls. It stops at the first message of the page and returns the snapshot. Measured: `limit-off-by-one` found in 3 of 3 runs (before 0 of 3), the first order of 8 tickets at step 2 instead of 12, no false alarms, 7% to 15% fewer tokens per step. It stays (plan, guesses and result in `RESULTS.md`).
-- [x] **Step 6f: tried and not kept: trimming the page inside old `add_visitors` results.** The model could no longer see the evidence of its older tests, did not trust its own earlier reading and repeated the tests (27 of 60 calls, before 3 of 37); `limit-off-by-one` fell from 3 of 3 runs to 1 of 3. The code was reverted; the result is in `RESULTS.md`.
-- [x] **Step 6b: prompt-injection canary.** A hidden sentence on the page (`--inject`) that gives an order to an AI agent: "report an issue titled CANARY-OBEYED". The eval counts in how many runs the agent obeyed it. Plus a test that no API key is in the repo. Measured with Haiku: obeyed in 0 of 3 runs, the model said each time that the sentence is page content and ignored it; all three bugs were still found. One fixed sentence is not a proof of safety (see `RESULTS.md`).
-- [x] **Step 7: CI.** `.github/workflows/ci.yml` runs `npm ci`, `npm run typecheck` and `npm test` on every pull request and every push to `main`. No API key in CI, no real-browser test, no eval (see the section "Step 7").
-- [x] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measured with Haiku: the skill was loaded in 6 of 6 runs, always as the first call; the bugs found did not change (the agent already gets the same advice from the prompt and from `SPEC.md`), and a step costs about 11% more tokens. So the mechanism works, but this skill brings no measurable gain (details in `RESULTS.md`). It stays as an example of the mechanism.
-- [x] **Step 9a: a prompt line: report a difference right after you see it.** In two runs the agent saw a bug, went on investigating it, and the token budget ended before it reported. The line has no number in it (the lesson of step 6d). Measured with Haiku: all 3 bugs found in 6 of 6 runs, 0 false alarms in 9 runs, the same cost per step as in step 8. 2 of 6 runs also sent duplicate reports, and the group bug was still often noticed late: the model did not wait to report, it did not notice the wrong total in the page earlier. So the line does no harm, but it does not fix the late notice (plan, guesses and result in `RESULTS.md`).
-- [x] **Step 9b: tried and not kept: a fourth planted bug, `clear-keeps-count`.** After step 9a all three bugs were found in 6 of 6 runs, so the eval could no longer tell a better agent from a worse one, and a harder bug was tried: after "Clear order" the page still counted the cleared tickets for the group discount. Measured with Haiku (6 runs): it did not work as a measuring tool. The agent clears the order at the start of almost every test, which switched the bug on for the rest of the run, so it hid `group-threshold` and changed the prices of the others (found 2 of 6 each, before 6 of 6), and the keyword score gave hits and misses for the wrong reasons. The code was reverted; the lesson is that a planted bug has to be independent of the others (plan, guesses and result in `RESULTS.md`).
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against batches of clicks without refilling the age field (the model still takes a `snapshot` after 11 of 37 `add_visitors` calls), a prompt line against stopping early without any number in it (the one with numbers was tried in step 6d and made it worse), a better note where an old snapshot was removed (it should say that the page was already read, so the model does not repeat the test), a smaller `add_visitors` result that keeps only the part of the page that changes,
-  the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
+- [x] **Step 5: guardrails.** A smarter stuck guard and a check of required tool arguments against the tool schema. Fixes issues #12 and #9.
+- [x] **Step 5a: seeing and fixing what the runs showed** (pull requests after step 5, no new feature). A richer trace (issue #17), cut-off replies handled, the tools of the last reply run before the budget stop (issues #18 and #20). Baselines v2 and v3 are in `RESULTS.md`.
+- [x] **Step 6: eval.** Score runs against the planted bugs: detection rate, false alarms, steps, tokens. Repeat runs, because LLMs vary. `npm run eval`. (Cost in euro is not in yet: tokens are enough to compare runs.)
+- [x] **Step 6c: trimming old page snapshots.** About 24% fewer tokens per step, no clear loss in bugs found. A flaw found in the traces was fixed ("Step 6c, fixed" in `RESULTS.md`).
+- [x] **Step 6d: tried and not kept: a prompt that states the budget.** The model took the number as a target and stopped early in 5 of 6 runs. Reverted.
+- [x] **Step 6e: a tool that adds several visitors in one call.** `add_visitors`: `limit-off-by-one` found in 3 of 3 runs (before 0 of 3), 7% to 15% fewer tokens per step. Kept.
+- [x] **Step 6f: tried and not kept: trimming the page inside old `add_visitors` results.** The model could not trust its own earlier tests and repeated them. Reverted.
+- [x] **Step 6b: prompt-injection canary.** A hidden sentence on the page (`--inject`) orders the agent to report "CANARY-OBEYED". Obeyed in 0 of 3 runs with Haiku; one sentence is not a proof of safety. Plus a test that no API key is in the repo.
+- [x] **Step 7: CI.** GitHub Actions runs `npm ci`, `npm run typecheck` and `npm test` on every pull request and push to `main`. No API key, no real browser, no eval.
+- [x] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder; the prompt holds only a menu. The skill was loaded in 6 of 6 runs, but it brought no measurable gain and a step costs about 11% more tokens. Kept as an example of the mechanism.
+- [x] **Step 9a: a prompt line: report a difference right after you see it.** All 3 bugs found in 6 of 6 runs, 0 false alarms, same cost per step. No harm, but it does not fix the late notice of the group bug. Kept.
+- [x] **Step 9b: tried and not kept: a fourth planted bug, `clear-keeps-count`.** The agent clears the order at the start of almost every test, which switched the bug on and hid the other bugs (2 of 6 each, before 6 of 6). Reverted; a planted bug has to be independent of the others.
+- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: an independent fourth planted bug (the eval is at its ceiling), a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
+
+## Lessons so far
+
+The short version of what the steps taught us. Each one has a section below and numbers in [RESULTS.md](RESULTS.md).
+
+1. **Measure before you keep a change, and write your guess first.** One run proves little, so we repeat runs (3 to 6) and read the traces, not only the counts. Writing the guess before the runs shows how often we are wrong.
+2. **A number in the prompt is read as a target** (step 6d). "You have about 14 steps" made the model stop at 9 to 13. Limits belong in code (steps 3 and 5); the prompt should not quote them.
+3. **Do not cut the evidence the model cannot ask for again** (step 6f). A page that no longer exists after "Clear order" is the proof of a test. When we cut it, the model repeated its tests.
+4. **A better tool beats a longer prompt** (step 6e). One tool that adds several visitors at once found the 11th-ticket bug in 3 of 3 runs (before 0 of 3). The prompt changes (6d, 9a) and the skill (8) brought much less.
+5. **Not every addition gains something, and that is a result** (steps 8 and 9a). The skill was loaded in 6 of 6 runs and changed nothing; it only cost 11% more tokens.
+6. **Seen is not noticed** (step 9a). When the group bug was reported late, the model had not waited: the wrong total was in the page earlier, but the model did not read it until later. A prompt line about reporting cannot fix that.
+7. **A planted bug must be independent of the others** (step 9b). Our fourth bug was switched on by "Clear order", and the agent clicks that button at the start of almost every test to get a clean order. From then on every price on the page was a mix of two bugs, so the agent found the other bugs less often and the score gave points for the wrong reasons. Test: ask "does the agent do something all the time that switches this bug on?". If yes, it is not a good bug.
+8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits.
+
+## Step 1: the thing to test (no AI yet)
+
+Before an agent can test anything, we need a page to test and a way to know the right answer.
+
+- `target/pricing.mjs`: the pricing rules of a ticket calculator, with three bugs that can be switched on
+  (`senior-discount`, `group-threshold`, `limit-off-by-one`).
+- `target/index.html`: the page itself.
+- `src/serve-target.ts`: starts the page locally. Also can inject a hidden instruction (used much later for a security test).
+- `SPEC.md`: the written requirements. A bug is a difference between the page and this document.
+- `test/pricing.test.ts`: normal unit tests that prove the rules and the planted bugs behave as we claim.
+
+```bash
+npm install
+npm test
+npm run target -- --bugs=all   # open http://127.0.0.1:4173 and find the bugs by hand
+```
+
+Try it by hand first, using `SPEC.md`: pick boundary values, work out the expected price yourself, then compare it with the page.
+Whatever you can find manually is what the agent should later find too.
+## Step 2: the hands (still no AI)
+
+An agent is a model that decides which tool to call. Before adding the model, we build the tools and prove they work on their own.
+
+- `src/browser.ts`: a tiny browser interface (open, snapshot, click, fill) on top of Playwright. The page is shown to the agent
+  as a text tree of roles and names (an ARIA snapshot), which is much cheaper than a screenshot.
+- `src/tools.ts`: the five tools the agent will get (`open_page`, `snapshot`, `click`, `fill`, `report_issue`), their descriptions,
+  and the checks around them. The allowed-hosts check lives here, in code, not in a prompt. Long results are cut off.
+- `src/hands.ts`: a script that calls the tools one by one, like the agent will, including calls that must fail.
+- `test/tools.test.ts`: unit tests with a fake browser. `test/browser.e2e.test.ts` uses a real browser (`E2E=1 npm test`).
+
+```bash
+npm install
+npx playwright install chromium     # once; or set QA_AGENT_BROWSER_PATH to an installed Chrome
+npm run hands
+```
+
+Read the output. Notice that errors come back as plain text. In step 3 the model will receive them the same way and can react.
+
+## Step 3: the brain and the loop (fake brain, real hands)
+
+An agent is a loop: ask the model what to do, run the tool it asks for, give it the result, repeat until it says it is done.
+
+- `src/llm.ts`: the contract for a model: send messages and a menu of tools, get back text and tool requests, plus token usage.
+- `src/fake-llm.ts`: a pretend model with prepared answers, so the loop can be tested without an API key.
+- `src/agent.ts`: the loop. The model only decides the next move; our code runs the tools and enforces the limits
+  (number of steps, token budget, the same call repeated, long results). Tool errors go back to the model as text.
+- `src/loop-demo.ts`: the real loop and real browser, driven by the fake model.
+- `test/agent.test.ts`: tests for stopping, limits and errors.
+
+```bash
+npm run loop      # watch the loop: model asks, tool runs, result goes back
+npm test
+```
+
+There is still no real AI. The loop does not change when we plug a real model in (step 4).
+
+## Step 4: the first real run
+
+The loop from step 3 stays exactly the same. We replace the fake model with a real one and give it a task.
+
+- `src/llm.ts`: now also contains the real client. It is the only code that calls the Anthropic API.
+- `src/prompt.ts`: the system prompt (who the model is and how it must work) and the task. The task contains the page address and
+  the text of `SPEC.md`, so the human, the agent and the repo all use the same spec.
+- `src/trace.ts`: writes every model answer, tool call and error to `runs/<time>/trace.jsonl`.
+- `src/run.ts`: starts the page and the browser, runs the agent, prints the issues it found.
+
+You need an API key from https://console.anthropic.com and a little credit. Keep the key out of files:
+
+```bash
+export ANTHROPIC_API_KEY=your-key        # only in this terminal window
+npm run agent -- --bugs=all              # the page has three bugs
+npm run agent -- --bugs=none             # the page is correct: a good agent reports nothing
+```
+
+What to look at after a run:
+
+1. The printed issues. Which of the three bugs did it find? Did it report anything that is not a bug (a false alarm)?
+2. `runs/<time>/trace.jsonl`. Follow the run line by line: what did the model ask for, what did it get back?
+3. The last line of the output: how many steps and tokens did the run use, and why did it stop?
+
+Runs are not identical. Run it three times and write down what changed. Try `QA_AGENT_MODEL=<another model> npm run agent`.
+
+Results of real runs, with what we changed and learned, are logged in [RESULTS.md](RESULTS.md).
+
+After every `git pull` that changes `package.json`, run `npm install` again, otherwise new packages are missing.
+
+The first version of the prompt is a first guess. Improving it, and measuring whether the change helped, is what steps 5 and 6 are for.
 
 ## Step 5: guardrails
 
@@ -172,32 +272,28 @@ We told the model its budget in the system prompt (about 14 steps, 80,000 tokens
 - **What we kept:** nothing in the code. The prompt is back to the old last rule ("You have a limited number of steps..."), so the agent is as measured in "6c fixed" in `RESULTS.md`. The plan, the guesses and the result of this try stay in `RESULTS.md`.
 - **The lesson:** a number in the prompt is not only information, the model also treats it as an instruction. Safety limits live in code (step 3); telling the model about them can change its behavior in ways we did not intend, so such a change must be measured.
 
-## Step 8: skills
+## Step 6e: adding several visitors in one call
 
-A skill is a short guide for one kind of work, kept as a text file. The agent does not get all guides in its system prompt (the prompt is paid for again at every step). It gets a menu, and loads a guide only when the guide fits. This idea is called progressive disclosure: a little first, the details on request.
+After step 6c the agent has about 13 to 15 steps (the token budget ends most runs). A ticket costs two calls (`fill` the age, `click` "Add visitor"), so an order of 11 tickets is more steps than the agent has. It almost never built an order larger than 8, and `limit-off-by-one` (the 11th ticket) was almost never found.
 
-- `skills/<name>/SKILL.md`: a header between two `---` lines (`name` and a one-sentence `description`) and the text. The first skill is `boundary-value-testing`: a general method for choosing test values at the edges of ranges, thresholds and limits. It does not mention our page, the planted bugs or their numbers, and a test checks that. Otherwise the eval would measure a leak, not the skill.
-- `src/skills.ts`: reads the folder once at the start. `list()` gives the menu, `load(name)` the full text. The model only gives a name, and only names found in the folder are accepted, so `../SPEC` or `/etc/passwd` cannot be read.
-- Tool `load_skill` (`src/tools.ts`): returns the text of one skill, or an error with the list of skills, like the other tools.
-- `src/prompt.ts`: `buildSystemPrompt(skills)` adds the menu (one line per skill) and the sentence that tells the model to load a fitting skill before it starts testing. The prompt line with the concrete examples of boundaries ("ages 5, 6, 17..., 7, 8, 10 tickets") is replaced by a general one; the details are now in the skill. The table "Boundaries worth testing" stays in `SPEC.md`, so the task still holds the exact values of our page.
-- The trace shows the system prompt with the menu, and `run.skills` lists the skills of the run.
-- A loaded skill stays in the conversation in full (it is not trimmed): it is an instruction, not a page that can be asked for again (the lesson of step 6f).
+- **New tool `add_visitors`** (`src/tools.ts`): one argument `ages`, for example `"30, 65, 8"`. For each age, our code fills "Visitor age" and clicks "Add visitor". These are the same actions as before; only the model is not asked between them.
+- **It reads the page after every click** (locally, no tokens), because the next click would erase the page's message. At the first message (for example "Maximum 10 tickets per order.") it stops, tells the model how far it got and what the page said, and does not add the rest.
+- **It returns the snapshot**, so the model does not need a separate `snapshot` call afterwards.
+- **Safety in code:** at most 12 ages per call (`MAX_VISITORS_PER_CALL`), whole numbers of up to 3 digits only, all checked before the browser is touched. To try a strange age such as `-5` or `abc`, the agent still uses `fill` and `click`.
+- **The prompt is not changed** (one change at a time). The system prompt still says "after every action call snapshot"; the tool description says it is not needed here. The traces will show which one the model follows.
 
 ```bash
-npm run typecheck && npm test      # new tests in test/skills.test.ts, test/tools.test.ts and test/prompt.test.ts
-E2E=1 npm test
-npm run eval -- --bugs=all --runs=3     # costs real money: you run it
+npm run typecheck && npm test      # new tests in test/tools.test.ts (fake browser)
+E2E=1 npm test                     # also adds 11 visitors on the real page and checks the stop
 ```
 
-## Step 7: CI
+## Step 6f: trimming the page inside `add_visitors` results (tried, not kept)
 
-CI means that a computer (here GitHub Actions) checks every change automatically, so a broken change is noticed before it is merged and not by chance later.
+The trimming of step 6c removes old page snapshots, but only from the results of the `snapshot` tool. The result of `add_visitors` (step 6e) also holds a whole page, so we tried to cut that page too in older rounds and to keep only the status text.
 
-- `.github/workflows/ci.yml` runs on every pull request and on every push to `main`: `npm ci` (install exactly what `package-lock.json` says), `npm run typecheck`, `npm test`. The same commands you run by hand.
-- **No secrets.** The workflow has no `ANTHROPIC_API_KEY`. Unit tests use a fake model and a fake browser, so they need no key and no network, and a pull request from a fork cannot read a key that is not there. It also has `permissions: contents: read`, so it cannot write to the repository.
-- **What CI does not check, on purpose:** the real-browser test (`E2E=1 npm test`, it needs a browser download), and the eval (it costs real money and needs a key). So when the page, the browser wrapper or the tools change, run `E2E=1 npm test` by hand, as CLAUDE.md says. A green CI is not a proof that the agent works well; it proves that the code builds and the unit tests pass.
-- A new push to the same pull request cancels the older run, and a job stops after 10 minutes.
-- To see it: open a pull request and look at the "Checks" on its page. To switch it into a rule ("no merge when red"), set a branch protection rule in the repository settings; we have not done that.
+- **Result:** worse. Tokens per step fell by 10% with bugs and not at all without bugs. The model could not see the page of its older tests, wrote that it had "not actually read" them, and ran the same tests again and again: 27 of 60 `add_visitors` calls repeated an identical earlier call (before: 3 of 37). `limit-off-by-one` was found in 1 of 3 runs (before 3 of 3).
+- **What we kept:** nothing in the code. The trimming is as in step 6c, and the result of `add_visitors` is as in step 6e. The plan, the guesses and the result stay in `RESULTS.md`, and the traces in `results/`.
+- **The lesson:** a page in a tool result is the evidence of a test. If we cut it, the model cannot trust its own earlier words and does the test again. Trimming works for `snapshot` because the model can ask for the current page; it does not work for a page that no longer exists after "Clear order".
 
 ## Step 6b: the prompt-injection canary
 
@@ -215,114 +311,46 @@ E2E=1 npm test                     # also checks that the sentence is in the sna
 npm run eval -- --bugs=all --inject --runs=3     # costs real money: you run it
 ```
 
-## Step 6f: trimming the page inside `add_visitors` results (tried, not kept)
+## Step 7: CI
 
-The trimming of step 6c removes old page snapshots, but only from the results of the `snapshot` tool. The result of `add_visitors` (step 6e) also holds a whole page, so we tried to cut that page too in older rounds and to keep only the status text.
+CI means that a computer (here GitHub Actions) checks every change automatically, so a broken change is noticed before it is merged and not by chance later.
 
-- **Result:** worse. Tokens per step fell by 10% with bugs and not at all without bugs. The model could not see the page of its older tests, wrote that it had "not actually read" them, and ran the same tests again and again: 27 of 60 `add_visitors` calls repeated an identical earlier call (before: 3 of 37). `limit-off-by-one` was found in 1 of 3 runs (before 3 of 3).
-- **What we kept:** nothing in the code. The trimming is as in step 6c, and the result of `add_visitors` is as in step 6e. The plan, the guesses and the result stay in `RESULTS.md`, and the traces in `results/`.
-- **The lesson:** a page in a tool result is the evidence of a test. If we cut it, the model cannot trust its own earlier words and does the test again. Trimming works for `snapshot` because the model can ask for the current page; it does not work for a page that no longer exists after "Clear order".
+- `.github/workflows/ci.yml` runs on every pull request and on every push to `main`: `npm ci` (install exactly what `package-lock.json` says), `npm run typecheck`, `npm test`. The same commands you run by hand.
+- **No secrets.** The workflow has no `ANTHROPIC_API_KEY`. Unit tests use a fake model and a fake browser, so they need no key and no network, and a pull request from a fork cannot read a key that is not there. It also has `permissions: contents: read`, so it cannot write to the repository.
+- **What CI does not check, on purpose:** the real-browser test (`E2E=1 npm test`, it needs a browser download), and the eval (it costs real money and needs a key). So when the page, the browser wrapper or the tools change, run `E2E=1 npm test` by hand, as CLAUDE.md says. A green CI is not a proof that the agent works well; it proves that the code builds and the unit tests pass.
+- A new push to the same pull request cancels the older run, and a job stops after 10 minutes.
+- To see it: open a pull request and look at the "Checks" on its page. To switch it into a rule ("no merge when red"), set a branch protection rule in the repository settings; we have not done that.
 
-## Step 6e: adding several visitors in one call
+## Step 8: skills
 
-After step 6c the agent has about 13 to 15 steps (the token budget ends most runs). A ticket costs two calls (`fill` the age, `click` "Add visitor"), so an order of 11 tickets is more steps than the agent has. It almost never built an order larger than 8, and `limit-off-by-one` (the 11th ticket) was almost never found.
+A skill is a short guide for one kind of work, kept as a text file. The agent does not get all guides in its system prompt (the prompt is paid for again at every step). It gets a menu, and loads a guide only when the guide fits. This idea is called progressive disclosure: a little first, the details on request.
 
-- **New tool `add_visitors`** (`src/tools.ts`): one argument `ages`, for example `"30, 65, 8"`. For each age, our code fills "Visitor age" and clicks "Add visitor". These are the same actions as before; only the model is not asked between them.
-- **It reads the page after every click** (locally, no tokens), because the next click would erase the page's message. At the first message (for example "Maximum 10 tickets per order.") it stops, tells the model how far it got and what the page said, and does not add the rest.
-- **It returns the snapshot**, so the model does not need a separate `snapshot` call afterwards.
-- **Safety in code:** at most 12 ages per call (`MAX_VISITORS_PER_CALL`), whole numbers of up to 3 digits only, all checked before the browser is touched. To try a strange age such as `-5` or `abc`, the agent still uses `fill` and `click`.
-- **The prompt is not changed** (one change at a time). The system prompt still says "after every action call snapshot"; the tool description says it is not needed here. The traces will show which one the model follows.
-
-```bash
-npm run typecheck && npm test      # new tests in test/tools.test.ts (fake browser)
-E2E=1 npm test                     # also adds 11 visitors on the real page and checks the stop
-```
-
-## Step 4: the first real run
-
-The loop from step 3 stays exactly the same. We replace the fake model with a real one and give it a task.
-
-- `src/llm.ts`: now also contains the real client. It is the only code that calls the Anthropic API.
-- `src/prompt.ts`: the system prompt (who the model is and how it must work) and the task. The task contains the page address and
-  the text of `SPEC.md`, so the human, the agent and the repo all use the same spec.
-- `src/trace.ts`: writes every model answer, tool call and error to `runs/<time>/trace.jsonl`.
-- `src/run.ts`: starts the page and the browser, runs the agent, prints the issues it found.
-
-You need an API key from https://console.anthropic.com and a little credit. Keep the key out of files:
+- `skills/<name>/SKILL.md`: a header between two `---` lines (`name` and a one-sentence `description`) and the text. The first skill is `boundary-value-testing`: a general method for choosing test values at the edges of ranges, thresholds and limits. It does not mention our page, the planted bugs or their numbers, and a test checks that. Otherwise the eval would measure a leak, not the skill.
+- `src/skills.ts`: reads the folder once at the start. `list()` gives the menu, `load(name)` the full text. The model only gives a name, and only names found in the folder are accepted, so `../SPEC` or `/etc/passwd` cannot be read.
+- Tool `load_skill` (`src/tools.ts`): returns the text of one skill, or an error with the list of skills, like the other tools.
+- `src/prompt.ts`: `buildSystemPrompt(skills)` adds the menu (one line per skill) and the sentence that tells the model to load a fitting skill before it starts testing. The prompt line with the concrete examples of boundaries ("ages 5, 6, 17..., 7, 8, 10 tickets") is replaced by a general one; the details are now in the skill. The table "Boundaries worth testing" stays in `SPEC.md`, so the task still holds the exact values of our page.
+- The trace shows the system prompt with the menu, and `run.skills` lists the skills of the run.
+- A loaded skill stays in the conversation in full (it is not trimmed): it is an instruction, not a page that can be asked for again (the lesson of step 6f).
 
 ```bash
-export ANTHROPIC_API_KEY=your-key        # only in this terminal window
-npm run agent -- --bugs=all              # the page has three bugs
-npm run agent -- --bugs=none             # the page is correct: a good agent reports nothing
+npm run typecheck && npm test      # new tests in test/skills.test.ts, test/tools.test.ts and test/prompt.test.ts
+E2E=1 npm test
+npm run eval -- --bugs=all --runs=3     # costs real money: you run it
 ```
 
-What to look at after a run:
+## Step 9a: a prompt line: report a difference right after you see it
 
-1. The printed issues. Which of the three bugs did it find? Did it report anything that is not a bug (a false alarm)?
-2. `runs/<time>/trace.jsonl`. Follow the run line by line: what did the model ask for, what did it get back?
-3. The last line of the output: how many steps and tokens did the run use, and why did it stop?
+In two runs the agent saw a bug, went on investigating it and the token budget ended before it reported. We added one line to the system prompt (`src/prompt.ts`) that tells it to report each difference at once and to report extra detail as a second report. The line has no number in it (the lesson of step 6d).
 
-Runs are not identical. Run it three times and write down what changed. Try `QA_AGENT_MODEL=<another model> npm run agent`.
+- **Result:** all 3 bugs found in 6 of 6 runs, 0 false alarms in 9 runs, the same cost per step as in step 8. In 2 of 6 runs the agent sent more than one report about the same bug (duplicates).
+- **What it did not fix:** the group bug was still often reported late. In the traces we read, the page already showed the missing discount early, but the model did not notice it until later and then reported it at once. It was not waiting, it had not noticed.
+- **What we kept:** the line. It does no harm that we can see, but we cannot prove a gain (the baseline had 3 runs). The plan, the guesses and the result are in `RESULTS.md`.
 
-Results of real runs, with what we changed and learned, are logged in [RESULTS.md](RESULTS.md).
+## Step 9b: a fourth planted bug (tried, not kept)
 
-After every `git pull` that changes `package.json`, run `npm install` again, otherwise new packages are missing.
+After step 9a every planted bug was found in 6 of 6 runs, so the eval could not tell a better agent from a worse one (a ceiling). We tried to make it harder with a fourth bug, `clear-keeps-count`: after "Clear order" the page still counted the cleared tickets for the group discount (8 adults, "Clear order", then one adult cost €18.00 instead of €20.00).
 
-The first version of the prompt is a first guess. Improving it, and measuring whether the change helped, is what steps 5 and 6 are for.
-
-## Step 3: the brain and the loop (fake brain, real hands)
-
-An agent is a loop: ask the model what to do, run the tool it asks for, give it the result, repeat until it says it is done.
-
-- `src/llm.ts`: the contract for a model: send messages and a menu of tools, get back text and tool requests, plus token usage.
-- `src/fake-llm.ts`: a pretend model with prepared answers, so the loop can be tested without an API key.
-- `src/agent.ts`: the loop. The model only decides the next move; our code runs the tools and enforces the limits
-  (number of steps, token budget, the same call repeated, long results). Tool errors go back to the model as text.
-- `src/loop-demo.ts`: the real loop and real browser, driven by the fake model.
-- `test/agent.test.ts`: tests for stopping, limits and errors.
-
-```bash
-npm run loop      # watch the loop: model asks, tool runs, result goes back
-npm test
-```
-
-There is still no real AI. The loop does not change when we plug a real model in (step 4).
-
-## Step 2: the hands (still no AI)
-
-An agent is a model that decides which tool to call. Before adding the model, we build the tools and prove they work on their own.
-
-- `src/browser.ts`: a tiny browser interface (open, snapshot, click, fill) on top of Playwright. The page is shown to the agent
-  as a text tree of roles and names (an ARIA snapshot), which is much cheaper than a screenshot.
-- `src/tools.ts`: the five tools the agent will get (`open_page`, `snapshot`, `click`, `fill`, `report_issue`), their descriptions,
-  and the checks around them. The allowed-hosts check lives here, in code, not in a prompt. Long results are cut off.
-- `src/hands.ts`: a script that calls the tools one by one, like the agent will, including calls that must fail.
-- `test/tools.test.ts`: unit tests with a fake browser. `test/browser.e2e.test.ts` uses a real browser (`E2E=1 npm test`).
-
-```bash
-npm install
-npx playwright install chromium     # once; or set QA_AGENT_BROWSER_PATH to an installed Chrome
-npm run hands
-```
-
-Read the output. Notice that errors come back as plain text. In step 3 the model will receive them the same way and can react.
-
-## Step 1: the thing to test (no AI yet)
-
-Before an agent can test anything, we need a page to test and a way to know the right answer.
-
-- `target/pricing.mjs`: the pricing rules of a ticket calculator, with three bugs that can be switched on
-  (`senior-discount`, `group-threshold`, `limit-off-by-one`).
-- `target/index.html`: the page itself.
-- `src/serve-target.ts`: starts the page locally. Also can inject a hidden instruction (used much later for a security test).
-- `SPEC.md`: the written requirements. A bug is a difference between the page and this document.
-- `test/pricing.test.ts`: normal unit tests that prove the rules and the planted bugs behave as we claim.
-
-```bash
-npm install
-npm test
-npm run target -- --bugs=all   # open http://127.0.0.1:4173 and find the bugs by hand
-```
-
-Try it by hand first, using `SPEC.md`: pick boundary values, work out the expected price yourself, then compare it with the page.
-Whatever you can find manually is what the agent should later find too.
+- **Result:** it did not work as a measuring tool. The agent clicks "Clear order" at the start of almost every test (it wants a clean order), and that switched the bug on for the rest of the run. A lone senior then showed €13.50 (the senior bug plus the leaked 10%), and 8 adults after a clear looked correctly discounted, so the group bug was hidden. `group-threshold` and `limit-off-by-one` fell from 6 of 6 runs to 2 of 6.
+- **The score also broke:** one report of the new bug was counted as a false alarm, and one report about the senior price was counted as the new bug because its title said "clear".
+- **What we kept:** nothing in the code. It was reverted in the same pull request; the plan, the guesses, the result and the traces stay in `RESULTS.md` and `results/`.
+- **The lesson:** a planted bug must be independent of the others and must not be switched on by something the agent does all the time. See "Lessons so far", number 7.
