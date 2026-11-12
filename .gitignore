@@ -2,3 +2,7 @@ node_modules/
 runs/
 .env
 evals/
+
+# Pages made by `npm run trace` (step 14): local reading aids, not results
+trace.html
+*-trace.html

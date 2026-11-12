@@ -84,7 +84,8 @@ Read the files in this order:
 20. `.github/workflows/ci.yml`: what runs on every pull request (step 7).
 21. `src/skills.ts` and `skills/boundary-value-testing/SKILL.md`: the skills (step 8).
 22. `src/trim-snapshots.ts`: cuts old page snapshots out of what the model sees (step 6c). `src/cli-args.ts`: reads the options `--bugs`, `--runs` and `--inject`.
-23. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts` and `test/secrets.test.ts` (no API key in the repo).
+23. `src/trace-to-html.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (step 14). Run it with `npm run trace -- <trace.jsonl>`.
+24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 
 ## Roadmap
 
@@ -111,6 +112,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
+- [x] **Step 14: a page that shows one trace.** `npm run trace -- <trace.jsonl>` writes a web page next to the trace: the setup, every step with what the model said, the tool calls and their results (errors in red, long snapshots folded, reported issues highlighted), and the stop. No new dependency. Everything from the trace is escaped before it goes into the page, and the page forbids scripts.
 - [x] **Step 13: wrap-up.** An overview table of all steps at the top of `RESULTS.md`, "Results in short" and lesson 9 in this README. The open ideas of the old "Step 9: make it better" item moved to "Ideas for later (not planned)", and nothing more is planned.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -164,7 +166,7 @@ Nothing here is on the roadmap and none of it is started. It is a list of what c
 
 **For showing it to other people**
 
-- **A small page that shows one trace** (the steps, the tool calls and the answers) in a readable way. It would make it easier to explain how the agent works. Size: small to medium.
+- **More for the trace page** (step 14 made the first version): a view that puts two runs side by side, or a summary of the tool calls per step. Size: small to medium.
 - **A scheduled run in CI** with a tiny eval and a cost cap, so a change that makes the agent worse is noticed. CI today (step 7) runs no model. Size: medium; it needs the API key stored as a secret.
 
 ## Step 1: the thing to test (no AI yet)
@@ -435,6 +437,32 @@ Every measurement before this one was made with Haiku. This step changes nothing
 
 ```bash
 QA_AGENT_MODEL=claude-sonnet-5-5 npm run eval -- --bugs=all --inject=action-neutral --runs=6     # costs real money: you run it
+```
+
+## Step 14: a page that shows one trace
+
+The trace of a run (`trace.jsonl`) has everything the agent did, but one JSON object per line is hard to read. This step turns it into one web page.
+
+```bash
+npm run trace -- runs/<time>/trace.jsonl          # writes runs/<time>/trace.html
+npm run trace -- results/eval-traces/budget-all/run-1-trace.jsonl   # an example from this repo
+```
+
+Open the new `.html` file in a browser. You see:
+
+- **the run:** the model, the bugs, the limits, the system prompt and the task (the two long texts are folded);
+- **every step:** what the model said, which tools it asked for and what it cost in tokens, and below it every tool call with its result. An error is red, a long result (such as a page snapshot) is folded, and a reported issue is highlighted;
+- **the end:** why the run stopped, how many steps and tokens, how many issues.
+
+How it is built:
+
+- `src/trace-to-html.ts` is a plain function: text of a trace in, text of a page out. No file, no browser, no model, so it is tested with small invented traces (`test/trace-to-html.test.ts`). `src/view-trace.ts` only reads the file and writes the page.
+- **A trace is not trusted.** It holds text from the page under test, from the model and from the canary note. Every piece of that text is escaped before it goes into the page (the test puts `<script>` and `<img onerror=...>` into every place a trace can carry text), and the page also carries a Content-Security-Policy that forbids scripts, as a second lock.
+- A line that is not valid JSON (for example the end of a run that crashed) becomes a note on the page instead of an error.
+- The generated pages (`trace.html`, `*-trace.html`) are ignored by git: they are reading aids, not results. The page is a local file and is not uploaded anywhere.
+
+```bash
+npm run typecheck && npm test      # new tests in test/trace-to-html.test.ts
 ```
 
 ## Step 7: CI
