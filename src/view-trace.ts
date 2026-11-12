@@ -3,12 +3,12 @@
 // Run it with:  npm run trace -- runs/<time>/trace.jsonl
 //
 // It writes the page next to the trace, with the same name and the ending .html
-// (so run-1-trace.jsonl becomes run-1-trace.html). The page is only a local file: it is not uploaded anywhere,
+// (so run-1-trace.jsonl becomes run-1-trace.html). Since step 15 every run writes its page by itself;
+// this command is for traces of older runs. The page is only a local file: it is not uploaded anywhere,
 // and the folders runs/ and evals/ are ignored by git.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { traceToHtml } from './trace-to-html';
+import { existsSync } from 'node:fs';
+import { writeTracePage } from './trace-page';
 
 // The first argument that is not an option is the path to the trace file.
 const input = process.argv.slice(2).find((a) => !a.startsWith('--'));
@@ -21,6 +21,4 @@ if (!existsSync(input)) {
   process.exit(1);
 }
 
-const output = input.replace(/\.jsonl$/, '') + '.html'; // trace.jsonl -> trace.html, next to the input
-writeFileSync(output, traceToHtml(readFileSync(input, 'utf8'), `Trace: ${basename(input)}`));
-console.log(`Written: ${output}`);
+console.log(`Written: ${writeTracePage(input)}`);

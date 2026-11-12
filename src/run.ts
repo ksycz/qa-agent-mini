@@ -11,7 +11,8 @@
 // save the full trace in runs/<time>/trace.jsonl.
 
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { flag, parseBugs, parseInject } from './cli-args';
 import { CANARY } from './score';
 import { runOnce } from './run-once';
@@ -46,11 +47,12 @@ try {
     console.log(`\n- ${i.title}\n  steps:    ${i.steps}\n  expected: ${i.expected}\n  actual:   ${i.actual}`);
   }
   console.log(`\nTrace and result saved in ${dir}/`);
+  console.log(`The run as a page: ${pathToFileURL(resolve(dir, 'trace.html'))}`); // a link that can be clicked in most terminals
 } catch (e) {
   // A readable message instead of a long stack trace. The most common problem is a wrong or missing key.
   const message = e instanceof Error ? e.message : String(e);
   console.error(`\nThe run failed: ${message}`);
   if (/authentication|x-api-key|401/i.test(message)) console.error('Check that ANTHROPIC_API_KEY is correct.');
-  console.error(`Whatever was recorded before the failure is in ${dir}/trace.jsonl`);
+  console.error(`Whatever was recorded before the failure is in ${dir}/trace.jsonl (and as a page: ${pathToFileURL(resolve(dir, 'trace.html'))})`);
   process.exitCode = 1;
 }
