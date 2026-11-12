@@ -851,6 +851,40 @@ Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four
 4. Steps and tokens per step stay about as in step 9a (14.5 steps, 5,774 tokens per step).
 5. The score rule is right: no report of another bug is counted as the decimal bug, and none of the decimal bug is lost. We check this by reading the titles in the summary.
 
+## Step 9c: a fourth planted bug, `decimal-age-accepted`, the result
+
+Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four bugs, code and prompt as in step 9a. Summary: `results/eval-decimal-all-summary.md`; traces in `results/eval-traces/decimal-all`. The secrets scan of the files was clean.
+
+| | Step 9a (3 bugs, 6 runs) | Step 9c (4 bugs, 6 runs) |
+|---|---|---|
+| `senior-discount` found | 6 of 6 | 6 of 6 |
+| `group-threshold` found | 6 of 6 | 5 of 6 |
+| `limit-off-by-one` found | 6 of 6 | 6 of 6 |
+| `decimal-age-accepted` found | - | **3 of 6** |
+| Bugs found per run (mean) | 3.0 of 3 | 3.2 of 4 (4 of 4 in 2 runs, 3 of 4 in 4 runs) |
+| False alarms | 0 | 0 |
+| Steps per run (mean) | 14.5 | 14.8 |
+| Tokens per step | 5,774 | about 5,650 |
+| Stopped on the token budget | 3 of 6 | 4 of 6 (the other 2 ended on `done` at step 15) |
+
+**The new bug behaves as planned.** In 3 of 6 runs (1, 2 and 6) the agent typed a decimal into the age field (1.5, 12.5, 1.5), and in all 3 it reported the bug within 1 or 2 steps ("The decimal 1.5 was accepted as a ticket, which the spec forbids. Reporting it."). In the other 3 runs it never typed a decimal: runs 3 and 5 never used `fill` at all, run 4 tested only `-1`. So the bug measures one thing: does the agent test the invalid input it has not been told about. It is found exactly when the agent looks for it. (In the 18 earlier runs with `add_visitors` a decimal was typed in 44% of the runs; here 50%.)
+
+**It is independent of the other bugs.** A decimal is typed only inside a test of validation, never to get a clean order. The runs that accepted a decimal ticket then cleared the order and tested the other bugs as usual. `senior-discount` and `limit-off-by-one` were found in 6 of 6 runs as before.
+
+**The one missed bug is not from the new bug.** `group-threshold` was missed in run 2. The agent built 7 tickets and then added 3 more, so the order jumped from 7 to 10 and an order of exactly 8 was never looked at; at 10 tickets the bug (threshold 9) already gives the discount, and the model wrote that €180 "matches the spec". It is the old coverage problem (see step 8), not an effect of the decimal ticket.
+
+**The score is right.** I read all 23 report titles: the 3 decimal reports were matched to the new bug, none of the other 20 was taken for it, and "€13.50"-type prices do not appear in titles. Second reports of the same bug (`group-threshold`) are in runs 3, 4 and 5; they do not change the score and cost a step each.
+
+**Verdict on the guesses**
+
+1. *`decimal-age-accepted` found in 2 to 4 of 6 runs:* **true** (3 of 6).
+2. *The other three stay at 5 or 6 of 6:* **true** (6, 5 and 6 of 6).
+3. *False alarms stay 0:* **true** (0 in 6 runs).
+4. *Steps and tokens per step about as in step 9a:* **true** (14.8 steps; about 5,650 tokens per step, 2% lower).
+5. *The score rule is right:* **true** (checked on all titles).
+
+**What we learn.** This time the independence check before building paid off: the bug is not found in every run and not in none, and it does not disturb the other bugs. The eval can tell runs apart again: 2 runs found all 4 bugs, 4 runs found 3. The new baseline for the next changes is: 3.2 of 4 bugs per run, 14.8 steps, 83,600 tokens per run, 0 false alarms. Six runs is a small sample: a difference of one run (for example 3 of 6 against 4 of 6) is not a result. The bug stays.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
