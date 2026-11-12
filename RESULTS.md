@@ -750,6 +750,38 @@ For the group bug we also have step 6e and 6b: 7 of 9 runs in all. Six runs is s
 4. Steps and tokens per step stay about the same as in step 8 (14 steps, 5,750 tokens per step). No effect on the budget is expected from one line; an effect would come from more reports.
 5. A possible harm: second reports of the same bug (duplicates). They are not false alarms in our scoring, but they cost steps. At least 2 of 6 runs with bugs have a second report of the same bug.
 
+## Step 9a: report a difference right after you see it, the result
+
+Runs: `npm run eval -- --bugs=all --runs=6` and `--bugs=none --runs=3` with Haiku (`claude-haiku-5-5`), the page and the tools as in step 8, only the new prompt line added. Summaries: `results/eval-report-all-summary.md`, `results/eval-report-none-summary.md`; traces in `results/eval-traces/report-all` and `report-none`.
+
+| | Step 8 (before, 3 runs) | Step 9a (6 runs) |
+|---|---|---|
+| `senior-discount` found | 3 of 3 | 6 of 6 |
+| `group-threshold` found | 2 of 3 | 6 of 6 |
+| `limit-off-by-one` found | 3 of 3 | 6 of 6 |
+| False alarms | 0 | 0 |
+| Steps per run (mean) | 14.0 | 14.5 |
+| Tokens per step | 5,750 | 5,774 |
+| Stopped on the token budget | 3 of 3 | 3 of 6 |
+
+Without bugs (3 runs): 0 false alarms, 13.3 steps, 74,774 tokens per run (5,608 per step; before 5,500), 2 of 3 runs on the token budget.
+
+**Seen to reported.** With a small script (`first seen` = the first page that shows the wrong value) we counted the steps between seeing a bug and reporting it. 14 of 18 reports came within 2 steps (before: 6 of 8). `senior-discount` and `limit-off-by-one`: all 12 within 1 or 2 steps. `group-threshold`: lags of 2, 9, 4, 8, 1 and 7 steps, so only 2 of 6 within 2 steps.
+
+**A correction to how we read "seen".** For three of the late group reports (runs 2, 4 and 6) we read what the model wrote. In each run the page already showed 8 tickets with no discount at step 2, but the model did not mention it until step 9 to 11, and it reported in the same reply in which it first wrote about it. So the model did not wait to investigate; it did not notice the wrong total in the snapshot earlier. The new line cannot help with that. I did not read run 3 (lag 4) this way, and the script is a heuristic, so these lags are a guide, not a measurement.
+
+**Duplicate reports.** 2 of 6 runs have more than one report of the same bug: run 3 has two `group-threshold` reports ("not applied at 8 tickets" and "starts at 9 tickets instead of 8"), run 5 has three (the third is titled "Correction to previous report"). Our scoring counts the bug once, but each report costs a step.
+
+**Verdict on the guesses**
+
+1. *Each bug is reported within 2 steps after it is first seen in at least 5 of 6 runs:* true for `senior-discount` and `limit-off-by-one`, **wrong for `group-threshold`** (2 of 6). The cause is mostly noticing, not delaying (see above).
+2. *Each bug found in 5 or 6 of 6 runs:* true, 6 of 6 for each bug. (Step 8 had `group-threshold` in 2 of 3 runs; with 3 and 6 runs this is a hint, not a proof of a gain.)
+3. *False alarms stay 0:* true, 0 in 9 runs.
+4. *Steps and tokens per step about as in step 8:* true (14.5 steps; 5,774 against 5,750 tokens per step).
+5. *At least 2 of 6 runs with a second report of the same bug:* true, exactly 2.
+
+**What we can and cannot say.** The line did no harm that we can see: no false alarms, same cost, all bugs found in all runs. We cannot say that it caused the better group result: the baseline is 3 runs, and in those the miss came from a run that built exactly 8 tickets only late. Half of the runs still end on the token budget, and the group bug is still often noticed late. The next lever is probably not the prompt wording but what the model reads in the page after `add_visitors` (a smaller result that points at the total), which is a candidate for step 9. The line stays.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
