@@ -18,6 +18,44 @@ how many bugs it finds, how many false alarms it raises, and how many steps, tok
 The agent decides what to test next. Our code does everything else: it runs the browser, blocks unsafe actions,
 enforces limits on steps and cost, and records what happened.
 
+## The architecture in one picture
+
+```mermaid
+flowchart TD
+    M["Model (LLM)<br/>decides the next move"]
+    subgraph OURS["Our code"]
+        L["Agent loop (src/agent.ts)<br/>ask the model, run the tool it asks for,<br/>give the result back, repeat"]
+        LIM["Limits, checked in code<br/>25 steps, 80,000 tokens, ..."]
+        T["Tools<br/>open_page, snapshot, click, fill,<br/>add_visitors, load_skill, report_issue"]
+        SK["Skills (skills folder)<br/>a menu in the prompt,<br/>the full text only on request"]
+        TR["Trace<br/>a record of everything the agent did"]
+    end
+    B["Browser (Playwright)<br/>shows the page as a text tree"]
+    P["Page under test<br/>with planted bugs (SPEC.md says what is right)"]
+    E["Eval (npm run eval)<br/>repeats runs and counts the bugs found"]
+    L <-->|"messages and tool requests"| M
+    L -->|"runs a tool"| T
+    T -->|"clicks, types, reads"| B
+    B --> P
+    T -.->|"load_skill"| SK
+    LIM -.->|"stops the loop"| L
+    L -->|"writes"| TR
+    E -->|"starts the run"| L
+```
+
+**In four sentences.** The model only decides the next move; it cannot touch the page itself. Our code (the loop) carries out each move with a tool, gives the result back, and repeats. Tools are the agent's hands, skills are guides it takes from a shelf only when it needs one, and the trace is the record of the whole run. Every limit is checked by our code, not requested in the prompt, so the model cannot talk its way past it.
+
+The limits (the values are in `src/agent.ts` and `src/tools.ts`):
+
+| Limit | Value | What happens when it is reached |
+|---|---|---|
+| Steps (calls to the model) | 25 | The run stops. In practice the token budget ends most runs first, after about 13 to 15 steps. |
+| Token budget for a run (input + output) | 80,000 | The run stops. It is checked at the end of a round, after the tools of the last reply have run, so a run can end slightly over. |
+| Length of one reply of the model | 1,000 tokens | A longer reply is cut off; the loop tells the model and goes on. |
+| Length of one tool result | 6,000 characters | The rest is cut off, which saves tokens. |
+| The same call, result and page again and again | 3 times | First one warning in the tool result, then the run stops if it repeats. |
+| Web hosts the agent may open | `127.0.0.1` and `localhost` | Any other address is refused by the `open_page` tool. |
+
 ## Why a custom agent, and not Playwright Test Agents?
 
 Playwright ships ready-made agents (the planner, generator and healer set up with `npx playwright init-agents`).
