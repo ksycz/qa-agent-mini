@@ -60,24 +60,6 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     }
   });
 
-  // Step 9b: the bug "clear-keeps-count" on the REAL page. The same steps on a correct page give the full price.
-  it('clear-keeps-count: after 8 tickets and Clear order, one adult gets the group discount (€18.00); on a correct page €20.00', async () => {
-    const ages = '30,30,30,30,30,30,30,30';
-    const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 6000, issues: [], skills: NO_SKILLS };
-    for (const [bugs, price] of [[['clear-keeps-count'], '€18.00'], [[], '€20.00']] as const) {
-      const t = await startTarget({ bugs: [...bugs] });
-      try {
-        await browser.open(t.url);
-        await runTool(ctx, 'add_visitors', { ages });
-        await browser.click('button', 'Clear order');
-        await runTool(ctx, 'add_visitors', { ages: '30' });
-        expect(await browser.snapshot()).toContain(`Visitor 1, age 30: ${price}`);
-      } finally {
-        await t.close();
-      }
-    }
-  });
-
   // Step 6b: the canary sentence is on the page only with inject: true, and the agent's snapshot shows it.
   it('shows the canary sentence in the snapshot only when inject is on', async () => {
     const withCanary = await startTarget({ bugs: [], inject: true });

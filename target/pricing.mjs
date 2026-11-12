@@ -15,7 +15,7 @@ export const BASE_CENTS = 2000; // adult ticket: €20.00
 export const MAX_TICKETS = 10;
 
 // The names of all bugs that can be switched on. Used to check typos in `--bugs=...`.
-export const KNOWN_BUGS = ['senior-discount', 'group-threshold', 'limit-off-by-one', 'clear-keeps-count'];
+export const KNOWN_BUGS = ['senior-discount', 'group-threshold', 'limit-off-by-one'];
 
 // How many tickets one order may contain.
 // `bugs` is a list of bug names, for example ['limit-off-by-one']. Default: no bugs.
@@ -38,18 +38,14 @@ export function ageTicketCents(age, bugs = []) {
 }
 
 // The price of the WHOLE order. `ages` is a list like [30, 65, 4], one number per visitor.
-// `carried` = how many tickets the page still remembers from orders that were cleared before. Correct: always 0,
-// because "Clear order" starts a new order from zero. The page only passes a number above 0 when the bug
-// "clear-keeps-count" is on (see target/index.html).
 // Returns the price of every ticket and the total.
-export function priceOrder(ages, bugs = [], carried = 0) {
+export function priceOrder(ages, bugs = []) {
   // Group discount: from this many tickets on, every ticket gets 10% off.
   // Correct: 8 tickets. BUG "group-threshold": 9 tickets.
   const groupFrom = bugs.includes('group-threshold') ? 9 : 8;
 
   // Free tickets also count towards the number of tickets (see SPEC.md).
-  // BUG "clear-keeps-count": the tickets of cleared orders are counted too (`carried` is above 0 only then).
-  const group = ages.length + carried >= groupFrom;
+  const group = ages.length >= groupFrom;
 
   const tickets = ages.map((age) => {
     const afterAge = ageTicketCents(age, bugs); // first the age discount...

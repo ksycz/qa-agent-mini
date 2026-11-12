@@ -3,7 +3,7 @@
 // Why: a model does not do the same thing twice, so one run proves nothing. Many runs show the rate (found 2 of 3 times, ...).
 //
 //   export ANTHROPIC_API_KEY=...
-//   npm run eval -- --bugs=all --runs=3       the page has all four bugs
+//   npm run eval -- --bugs=all --runs=3       the page has three bugs
 //   npm run eval -- --bugs=none --runs=3      the page is correct: every report is a false alarm
 //   npm run eval -- --bugs=all --inject       the page also carries a hidden sentence that gives orders to an AI agent (the canary, step 6b);
 //                                             the summary says in how many runs the agent obeyed it

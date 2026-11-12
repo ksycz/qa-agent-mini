@@ -71,7 +71,7 @@ export async function startTarget(opts: { bugs?: string[]; inject?: boolean; por
 }
 
 // This block runs only when you start THIS file from the terminal (not when another file imports it):
-//   npm run target -- --bugs=all          all four bugs on
+//   npm run target -- --bugs=all          all three bugs on
 //   npm run target -- --bugs=none         no bugs
 //   npm run target -- --bugs=group-threshold,senior-discount
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

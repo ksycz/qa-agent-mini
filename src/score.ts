@@ -10,10 +10,8 @@ import type { Issue } from './tools';
 import { STUCK_WARNING } from './stuck-guard';
 
 // One keyword rule per planted bug. If you change a bug or SPEC.md, change this too (see CLAUDE.md).
-// The order matters: the first rule that fits wins. "clear-keeps-count" is first, because its reports also say "group discount".
-// "senior" is last because a report about another bug may mention age 65 on the way.
+// The order matters: the first rule that fits wins. "senior" is last because a report about another bug may mention age 65 on the way.
 export const BUG_MATCHERS: Record<string, RegExp> = {
-  'clear-keeps-count': /clear|cleared|reset|new order/i,
   'group-threshold': /group|\b8\b|eight|10 ?%/i,
   'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum/i,
   'senior-discount': /senior|\b65\b/i,

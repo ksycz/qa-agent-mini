@@ -13,10 +13,9 @@ import { launchBrowser } from './browser';
 import { startTarget } from './serve-target';
 import { runTool, type ToolContext } from './tools';
 import { NO_SKILLS } from './skills';
-import { KNOWN_BUGS } from '../target/pricing.mjs';
 
-// Start the demo page with all the bugs switched on, and a real browser.
-const target = await startTarget({ bugs: KNOWN_BUGS });
+// Start the demo page with all three bugs switched on, and a real browser.
+const target = await startTarget({ bugs: ['senior-discount', 'group-threshold', 'limit-off-by-one'] });
 const browser = await launchBrowser();
 
 // Everything the tools need. Only these two hosts may be opened.

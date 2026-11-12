@@ -829,6 +829,8 @@ Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four
 4. *Steps and tokens per step about as in 9a:* tokens per step true; steps 12.8 instead of 14.5 because of two early stops.
 5. *The keyword rule is right:* **wrong** in 2 of 6 runs (one hit for the wrong reason, one miss).
 
+**The code was reverted** in the same pull request (page, pricing, `SPEC.md`, score rule and tests are as in step 9a); what stays is this section, the plan above and the traces.
+
 **What we learn.** A planted bug must be independent of the others. Here the trigger ("Clear order") is the agent's most common way to start a clean test, so the bug changes the page for the rest of the run and the other bugs can no longer be measured. It also made the keyword score unreliable, because the reports of two bugs describe the same page behaviour. The eval did get harder (the agent found 2 of 4 bugs per run on average, before 3 of 3), but because the page became confusing, not because the agent became worse at testing, so the numbers cannot be used to compare changes. The bug in this form is not a good ground truth.
 
 ## Summary of runs 1 and 2

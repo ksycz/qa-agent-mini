@@ -12,7 +12,7 @@ The agent is a small AI tester. You give it a web page and a written specificati
 4. When the page does something different from the spec, it reports an issue with the steps, the expected result and the actual result.
 5. When it has tested enough, it stops and writes a short summary.
 
-The page is a ticket price calculator with four bugs planted on purpose (the fourth came in step 9b). Because we know the bugs, we can measure the agent:
+The page is a ticket price calculator with three bugs planted on purpose. Because we know the bugs, we can measure the agent:
 how many bugs it finds, how many false alarms it raises, and how many steps, tokens and euros a run costs.
 
 The agent decides what to test next. Our code does everything else: it runs the browser, blocks unsafe actions,
@@ -36,7 +36,7 @@ Every file starts with a comment that says what it is for, and the code is comme
 Read the files in this order:
 
 1. `SPEC.md`: what the page should do.
-2. `target/pricing.mjs`: the rules, and where the four bugs are planted.
+2. `target/pricing.mjs`: the rules, and where the three bugs are planted.
 3. `target/index.html`: the page (the script at the bottom is the logic).
 4. `src/serve-target.ts`: the small server that shows the page.
 5. `test/pricing.test.ts`: how the rules are tested.
@@ -78,7 +78,7 @@ Each step is a small pull request, so the history reads like a tutorial.
 - [x] **Step 7: CI.** `.github/workflows/ci.yml` runs `npm ci`, `npm run typecheck` and `npm test` on every pull request and every push to `main`. No API key in CI, no real-browser test, no eval (see the section "Step 7").
 - [x] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder. The prompt lists only the skill names and one-line descriptions; the agent loads the full instructions only when it needs them. First skill: `boundary-value-testing`. Measured with Haiku: the skill was loaded in 6 of 6 runs, always as the first call; the bugs found did not change (the agent already gets the same advice from the prompt and from `SPEC.md`), and a step costs about 11% more tokens. So the mechanism works, but this skill brings no measurable gain (details in `RESULTS.md`). It stays as an example of the mechanism.
 - [x] **Step 9a: a prompt line: report a difference right after you see it.** In two runs the agent saw a bug, went on investigating it, and the token budget ended before it reported. The line has no number in it (the lesson of step 6d). Measured with Haiku: all 3 bugs found in 6 of 6 runs, 0 false alarms in 9 runs, the same cost per step as in step 8. 2 of 6 runs also sent duplicate reports, and the group bug was still often noticed late: the model did not wait to report, it did not notice the wrong total in the page earlier. So the line does no harm, but it does not fix the late notice (plan, guesses and result in `RESULTS.md`).
-- [ ] **Step 9b: a fourth planted bug, `clear-keeps-count`.** After step 9a all three bugs were found in 6 of 6 runs, so the eval could no longer tell a better agent from a worse one. The new bug needs a sequence of actions: after "Clear order" the page still counts the cleared tickets for the group discount (8 tickets, Clear, one adult pays €18.00 instead of €20.00). `SPEC.md` already said that a new order starts from zero; it got one example and one boundary row. Measured with Haiku (6 runs): **this form of the bug does not work as a measuring tool.** The agent clears the order at the start of almost every test, which switches the bug on for the rest of the run, so it hides `group-threshold` and changes the prices of the others (found 2 of 6 each, before 6 of 6), and the keyword score gives hits and misses for the wrong reasons. A planted bug has to be independent of the others (plan, guesses and result in `RESULTS.md`).
+- [x] **Step 9b: tried and not kept: a fourth planted bug, `clear-keeps-count`.** After step 9a all three bugs were found in 6 of 6 runs, so the eval could no longer tell a better agent from a worse one, and a harder bug was tried: after "Clear order" the page still counted the cleared tickets for the group discount. Measured with Haiku (6 runs): it did not work as a measuring tool. The agent clears the order at the start of almost every test, which switched the bug on for the rest of the run, so it hid `group-threshold` and changed the prices of the others (found 2 of 6 each, before 6 of 6), and the keyword score gave hits and misses for the wrong reasons. The code was reverted; the lesson is that a planted bug has to be independent of the others (plan, guesses and result in `RESULTS.md`).
 - [ ] **Step 9: make it better.** Each change measured with the eval, one at a time: a prompt line against batches of clicks without refilling the age field (the model still takes a `snapshot` after 11 of 37 `add_visitors` calls), a prompt line against stopping early without any number in it (the one with numbers was tried in step 6d and made it worse), a better note where an old snapshot was removed (it should say that the page was already read, so the model does not repeat the test), a smaller `add_visitors` result that keeps only the part of the page that changes,
   the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring, a fourth planted bug.
 
@@ -135,7 +135,7 @@ A model does not do the same thing twice, so one run proves little (run 9 used 5
 
 ```bash
 export ANTHROPIC_API_KEY=your-key
-npm run eval -- --bugs=all --runs=3     # the page has four bugs
+npm run eval -- --bugs=all --runs=3     # the page has three bugs
 npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a false alarm
 ```
 
@@ -252,13 +252,13 @@ You need an API key from https://console.anthropic.com and a little credit. Keep
 
 ```bash
 export ANTHROPIC_API_KEY=your-key        # only in this terminal window
-npm run agent -- --bugs=all              # the page has four bugs
+npm run agent -- --bugs=all              # the page has three bugs
 npm run agent -- --bugs=none             # the page is correct: a good agent reports nothing
 ```
 
 What to look at after a run:
 
-1. The printed issues. Which of the four bugs did it find? Did it report anything that is not a bug (a false alarm)?
+1. The printed issues. Which of the three bugs did it find? Did it report anything that is not a bug (a false alarm)?
 2. `runs/<time>/trace.jsonl`. Follow the run line by line: what did the model ask for, what did it get back?
 3. The last line of the output: how many steps and tokens did the run use, and why did it stop?
 
@@ -311,8 +311,8 @@ Read the output. Notice that errors come back as plain text. In step 3 the model
 
 Before an agent can test anything, we need a page to test and a way to know the right answer.
 
-- `target/pricing.mjs`: the pricing rules of a ticket calculator, with four bugs that can be switched on
-  (`senior-discount`, `group-threshold`, `limit-off-by-one`, `clear-keeps-count`).
+- `target/pricing.mjs`: the pricing rules of a ticket calculator, with three bugs that can be switched on
+  (`senior-discount`, `group-threshold`, `limit-off-by-one`).
 - `target/index.html`: the page itself.
 - `src/serve-target.ts`: starts the page locally. Also can inject a hidden instruction (used much later for a security test).
 - `SPEC.md`: the written requirements. A bug is a difference between the page and this document.
