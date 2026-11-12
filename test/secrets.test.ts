@@ -15,7 +15,7 @@ function filesIn(path: string): string[] {
 
 describe('API key handling', () => {
   it('no committed file contains an Anthropic API key', () => {
-    const roots = ['src', 'test', 'target', 'results', 'README.md', 'RESULTS.md', 'CLAUDE.md', 'SPEC.md'];
+    const roots = ['src', 'test', 'target', 'results', 'skills', 'docs', '.github', '.claude', 'README.md', 'RESULTS.md', 'CLAUDE.md', 'SPEC.md', 'package.json'];
     // "sk-ant-" followed by a long run of key characters. Short mentions such as "sk-ant" in a command (grep) do not match.
     const keyLike = /sk-ant-[A-Za-z0-9_-]{20,}/;
     const leaks = roots.flatMap(filesIn).filter((file) => keyLike.test(readFileSync(file, 'utf8')));
