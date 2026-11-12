@@ -282,3 +282,20 @@ describe('agent loop', () => {
     expect(call.data.result).toBe(longPage);
   });
 });
+
+// Step 17: every model_reply in the trace says how long the call to the model took.
+describe('latency in the trace', () => {
+  it('writes durationMs into every model_reply event', async () => {
+    const trace = memoryTrace();
+    await runAgent({
+      llm: scriptedLlm([say('done')]),
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
+      system: 's',
+      task: 't',
+      trace,
+    });
+    const reply = trace.events.find((e) => e.type === 'model_reply');
+    expect(typeof reply?.data.durationMs).toBe('number');
+    expect(reply?.data.durationMs as number).toBeGreaterThanOrEqual(0);
+  });
+});

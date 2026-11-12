@@ -41,7 +41,9 @@ export type LlmRequest = {
 // What comes back. `usage` says how many tokens were used: this is what we pay for.
 export type LlmResponse = {
   content: Array<TextBlock | ToolUseBlock>;
-  usage: { inputTokens: number; outputTokens: number };
+  // Step 17: when the API reports tokens read from or written to the prompt cache, they are kept too (for the price).
+  // Note: `inputTokens` does NOT include them; the API counts them separately.
+  usage: { inputTokens: number; outputTokens: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number };
   // For the trace only: why did the model stop writing? The API says it, for example
   //   'end_turn' (it finished), 'tool_use' (it asked for tools) or 'max_tokens' (it was CUT OFF by our length limit).
   // The loop does not act on it yet. It is written to the trace so we can see cut-off answers (issue #17).
@@ -80,12 +82,18 @@ export function fromAnthropicContent(blocks: ReadonlyArray<{ type: string } & Re
 export function fromAnthropicResponse(res: {
   content: ReadonlyArray<{ type: string } & Record<string, unknown>>;
   stop_reason: string | null;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
 }): LlmResponse {
   return {
     content: fromAnthropicContent(res.content),
     // These two numbers are what we pay for.
-    usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+    usage: {
+      inputTokens: res.usage.input_tokens,
+      outputTokens: res.usage.output_tokens,
+      // Only when the API sent a number above 0, so the trace stays as short as before when caching is not used.
+      ...(res.usage.cache_read_input_tokens ? { cacheReadInputTokens: res.usage.cache_read_input_tokens } : {}),
+      ...(res.usage.cache_creation_input_tokens ? { cacheCreationInputTokens: res.usage.cache_creation_input_tokens } : {}),
+    },
     stopReason: res.stop_reason,
     blockTypes: res.content.map((b) => b.type), // all of them, also the ones fromAnthropicContent drops
   };

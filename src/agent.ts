@@ -99,7 +99,9 @@ export async function runAgent(args: {
 
     // 1. Ask the model what to do next. It sees the whole conversation so far, except that old page snapshots are
     // replaced by a short note (src/trim-snapshots.ts), because every old snapshot would be paid for again in every step.
+    const askedAt = Date.now(); // step 17: how long the model takes to answer (latency)
     const reply = await llm.complete({ system, tools: TOOL_DEFS, messages: trimOldSnapshots(messages), maxTokens: limits.maxTokensPerReply });
+    const durationMs = Date.now() - askedAt;
     inputTokens += reply.usage.inputTokens;
     outputTokens += reply.usage.outputTokens;
 
@@ -107,6 +109,7 @@ export async function runAgent(args: {
     // stopReason and blockTypes say WHY the answer ended and what the API really returned (also blocks we drop).
     trace?.event('model_reply', {
       step: steps,
+      durationMs, // step 17: the time this one call to the model took
       usage: reply.usage,
       stopReason: reply.stopReason,
       blockTypes: reply.blockTypes,

@@ -80,12 +80,12 @@ Read the files in this order:
 16. `src/trace.ts`: the written record of a run.
 17. `src/run.ts`: the first real run. The only file that starts everything together.
 18. `src/llm.ts` again, the bottom part: the one place that calls the Anthropic API.
-19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored.
+19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored. `src/cost.ts`: latency, run time and price of a run (step 17).
 20. `.github/workflows/ci.yml`: what runs on every pull request (step 7).
 21. `src/skills.ts` and `skills/boundary-value-testing/SKILL.md`: the skills (step 8).
 22. `src/trim-snapshots.ts`: cuts old page snapshots out of what the model sees (step 6c). `src/cli-args.ts`: reads the options `--bugs`, `--runs` and `--inject`.
 23. `src/trace-to-html.ts`, `src/trace-page.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (steps 14 and 15). Every run writes its page by itself; for an older trace run `npm run trace -- <trace.jsonl>`.
-24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts` and `test/secrets.test.ts` (no API key in the repo).
+24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts`, `test/cost.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 
 ## Roadmap
 
@@ -117,6 +117,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 15: the trace page appears by itself.** Every run (`npm run agent` and each run of `npm run eval`) writes its `trace.html` when it ends, also after a failed run, and prints a link; `summary.md` of an eval links to the page of every run. `npm run trace` stays for older traces.
 - [x] **Fixes after a review of the repo** (two pull requests). The allowed-hosts rule now also holds in the browser itself (a click on a link to another site is blocked, not only `open_page`), a real run allows only the port of the demo page, and the eval goes on after a failed run and lists it in the summary. Plus small fixes (the canary scoring compares whole host names, a wider test for API keys, and others).
 - [x] **Step 16: no "limited number of steps" in the prompt.** One sentence removed. With Haiku no run stopped before step 14 (step 11: two stopped at steps 8 and 10), bugs found 3.7 of 4 (step 11: 3.3), the decimal bug 4 of 6 (2 of 6); the cost is 36% more tokens per run. Kept.
+- [x] **Step 17: latency and price in the eval summary.** Every call to the model records how long it took; the summary shows p50 and p95 latency, run time, price per run and price per found bug (from list prices in `src/cost.ts`), and cache reads once caching is used. Behaviour of the agent unchanged.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
@@ -165,7 +166,7 @@ Nothing here is on the roadmap and none of it is started. It is a list of what c
 **A better agent**
 
 - **Cheaper runs without the early stops.** Step 16 showed that Haiku stopped early because of a sentence in the prompt; without it, it finds more but uses 36% more tokens. Open: can the same coverage be had for less, for example with prompt caching (below) or a check in code that lists the areas of `SPEC.md` that were never tested before the agent may finish? Size: small to medium.
-- **Prompt caching.** Every step sends the same system prompt, spec and tools again. Caching that part should make a run cheaper. Size: small to medium; the effect is easy to measure in tokens.
+- **Prompt caching.** Every step sends the same system prompt, spec and tools again. Since step 17 the summary would show the share of cache reads and the price would include them. Caching that part should make a run cheaper. Size: small to medium; the effect is easy to measure in tokens.
 - **A cheaper model for the routine steps**, and a stronger one for the thinking steps. Size: large; the gain is not certain.
 - **Small things left from step 9:** a prompt line against a `snapshot` after every `add_visitors` call, a better note where an old snapshot was removed, and the reply length limit together with hidden thinking (many replies carry a thinking block). Each is a small step with one measurement.
 - **A second skill**, for example one about the price rules. The first skill (step 8) was loaded in every run and changed nothing, so the first question is what a skill should contain to matter. Size: small, expected gain small.
@@ -579,4 +580,30 @@ The last rule of the system prompt began with "You have a limited number of step
 ```bash
 npm run typecheck && npm test
 npm run eval -- --bugs=all --runs=6     # costs real money: you run it; compare with step 11
+```
+
+## Step 17: latency and price in the eval summary
+
+In production an agent is watched like any other service: how long it takes and what it costs, per call and per task. Until now the eval counted only tokens and steps. This step adds time and money. The agent itself does not change.
+
+- **Latency:** the loop measures every call to the model and writes `durationMs` into each `model_reply` event of the trace. The summary shows **p50** (the typical call) and **p95** (the slow calls that the mean would hide), by the nearest-rank rule.
+- **Run time:** from the `start` to the `stop` event, mean and maximum.
+- **Price in dollars:** computed from the tokens of every call and a small table of list prices in `src/cost.ts` (Haiku 5.5 and Sonnet 5.5, with the date and the source). A model that is not in the table gets "price unknown", never a guess.
+- **Price per found bug:** the price of all runs divided by the bugs they found. This is the price of a result, not of an attempt: a run that found nothing still counts.
+- **Cache reads:** the token counts for the prompt cache are now recorded when the API sends them, and the summary shows their share. Prompt caching itself is not switched on (that would change the behaviour and is its own measured step), so this line does not appear yet.
+- **No alarms:** the hard budgets are in code (steps, tokens), and the eval is started by hand, so there is nothing running that could raise an alarm. In a real service the same numbers would feed a dashboard with alerts.
+
+What the saved traces of earlier steps cost by these list prices (computed, not billed; old traces have no call durations):
+
+| Measurement (6 runs) | Model | Price per run | Run time | Price per found bug |
+|---|---|---|---|---|
+| Step 11 (budget 120,000) | Haiku 5.5 | about $0.010 | 21 to 40 s | about $0.003 |
+| Step 16 (no step sentence) | Haiku 5.5 | about $0.014 | 26 to 44 s | about $0.004 |
+| Step 12 (neutral canary) | Sonnet 5.5 | about $0.18 | 26 to 40 s | about $0.046 |
+
+So Sonnet found every bug, but each found bug cost about 12 to 15 times more than with Haiku.
+
+```bash
+npm run typecheck && npm test      # new tests in test/cost.test.ts, test/score.test.ts and test/agent.test.ts
+npm run eval -- --bugs=all --runs=1     # costs real money: you run it; the summary has the new lines
 ```
