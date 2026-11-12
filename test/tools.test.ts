@@ -37,6 +37,16 @@ describe('assertAllowed', () => {
   // A classic trick: a host that STARTS with the allowed name. It must still be refused.
   it('rejects a lookalike host', () => expect(() => assertAllowed('http://127.0.0.1.evil.example/', ['127.0.0.1'])).toThrow());
   it('rejects garbage', () => expect(() => assertAllowed('not a url', ['127.0.0.1'])).toThrow(/Invalid URL/));
+  // After the review: an entry with a port allows only that port, and only http and https count.
+  it('with a port in the list, allows only that port', () => {
+    expect(() => assertAllowed('http://127.0.0.1:4173/x', ['127.0.0.1:4173'])).not.toThrow();
+    expect(() => assertAllowed('http://127.0.0.1:5432/', ['127.0.0.1:4173'])).toThrow(/"127.0.0.1:5432" is not allowed/);
+    expect(() => assertAllowed('http://localhost:4173/', ['127.0.0.1:4173'])).toThrow(/not allowed/);
+  });
+  it('refuses other schemes, even with an allowed-looking address', () => {
+    expect(() => assertAllowed('file:///etc/passwd', ['127.0.0.1'])).toThrow(/not allowed/);
+    expect(() => assertAllowed('ftp://127.0.0.1/', ['127.0.0.1'])).toThrow(/not allowed/);
+  });
 });
 
 describe('runTool', () => {

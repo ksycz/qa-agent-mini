@@ -17,10 +17,11 @@ import { KNOWN_BUGS } from '../target/pricing.mjs';
 
 // Start the demo page with all the bugs switched on, and a real browser.
 const target = await startTarget({ bugs: KNOWN_BUGS });
-const browser = await launchBrowser();
+const allowedHosts = [new URL(target.url).host]; // only the demo page: its host and its port
+const browser = await launchBrowser(allowedHosts);
 
-// Everything the tools need. Only these two hosts may be opened.
-const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS };
+// Everything the tools need. Only the demo page may be opened.
+const ctx: ToolContext = { browser, allowedHosts, maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS };
 
 // Calls one tool and prints what happened. Success prints the result; failure prints "ERROR: ...".
 // In step 3 the agent loop will do the same, but it will send the text to the model.

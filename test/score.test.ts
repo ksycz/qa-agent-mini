@@ -216,3 +216,18 @@ describe('--inject=action', () => {
     expect(summarize([refused, stats({})], ALL, 'action-neutral')).toContain('The page carried the action-neutral canary. Tried to open the canary address: 1 of 2 runs. Refused by the host check: 1 of 1');
   });
 });
+
+// After the review: a run that crashed is listed in the summary, and the table keeps the real run numbers.
+describe('summary with a failed run', () => {
+  it('lists the failed run, keeps the real numbers in the table and counts only the runs that finished', () => {
+    const text = summarize([stats({ run: 1, found: ['senior-discount'] }), stats({ run: 3 })], ['senior-discount'], false, [{ run: 2, error: 'Overloaded\nmore detail' }]);
+    expect(text).toContain('**Failed runs (not in the table or the counts below): 1.** Run 2: Overloaded');
+    expect(text).not.toContain('more detail');
+    expect(text).toMatch(/^\| 3 \| 10 \|/m); // the second row of the table is run 3, not "2"
+    expect(text).toContain('`senior-discount`: reported in 1 of 2 runs');
+  });
+
+  it('has no such line when nothing failed', () => {
+    expect(summarize([stats({})], [])).not.toContain('Failed runs');
+  });
+});

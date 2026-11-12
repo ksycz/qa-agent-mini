@@ -2,6 +2,7 @@
 //
 // Playwright can do hundreds of things. We give the agent only FIVE, on purpose:
 // a small set of actions is easier to explain to a model, easier to test and safer.
+// The browser can also reach only the allowed hosts (see launchBrowser), whatever the agent clicks.
 //
 // This file has two parts:
 //   1. `BrowserPort`: a list of what the agent may do (an "interface" = a contract).
@@ -9,6 +10,7 @@
 // Tests use a FAKE implementation of the same contract, so they run without any browser.
 
 import { chromium } from 'playwright';
+import { isAllowedUrl } from './hosts';
 
 // The contract. Anything that has these five functions can serve as the agent's browser.
 export interface BrowserPort {
@@ -24,7 +26,9 @@ export interface BrowserPort {
 const TIMEOUT_MS = 5000;
 
 // Starts a real Chrome and returns it wrapped in the contract above.
-export async function launchBrowser(): Promise<BrowserPort> {
+//   allowedHosts: the only hosts the browser may reach (same format as in src/hosts.ts). It is required on purpose,
+//                 so no caller can forget it.
+export async function launchBrowser(allowedHosts: string[]): Promise<BrowserPort> {
   const browser = await chromium.launch({
     headless: true, // no visible window
     // Optional: use a Chrome you already have instead of the one Playwright downloads.
@@ -33,6 +37,13 @@ export async function launchBrowser(): Promise<BrowserPort> {
   });
   const page = await browser.newPage();
   page.setDefaultTimeout(TIMEOUT_MS);
+
+  // THE SECOND LOCK (added after the review): every request the page makes passes through here, also the ones no tool sees,
+  // for example a click on a link to another site, a form, a redirect, or an image the page loads. A forbidden one is cancelled,
+  // so the browser cannot reach it. The open_page tool still checks first, so the model gets a clear message in that case.
+  await page.route('**/*', (route) =>
+    isAllowedUrl(route.request().url(), allowedHosts) ? route.continue() : route.abort('blockedbyclient'),
+  );
 
   return {
     open: async (url) => {

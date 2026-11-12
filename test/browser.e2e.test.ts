@@ -7,6 +7,7 @@
 //   E2E=1 npm test
 // (If you use your own Chrome:  E2E=1 QA_AGENT_BROWSER_PATH="/path/to/chrome" npm test)
 
+import { createServer } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
 import { ACTION_TEXT, INJECTION_TEXT, NEUTRAL_TEXT, startTarget } from '../src/serve-target';
@@ -21,7 +22,7 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
   // Before the tests: start the page (with the senior bug) and the browser. After: close both.
   beforeAll(async () => {
     target = await startTarget({ bugs: ['senior-discount'] });
-    browser = await launchBrowser();
+    browser = await launchBrowser(['127.0.0.1']); // any port on 127.0.0.1: several tests start their own page
   });
   afterAll(async () => {
     await browser?.close();
@@ -121,6 +122,27 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
       expect(snap).not.toContain(INJECTION_TEXT);
     } finally {
       await withNeutral.close();
+    }
+  });
+
+  // After the review: the browser itself refuses a host that is not allowed, also for a click on a link,
+  // which the open_page check never sees. Here: a page on an allowed port links to a page on another port.
+  it('blocks a click on a link to a host that is not allowed', async () => {
+    const other = await startTarget({ bugs: [] }); // a real page on another port, NOT in the list below
+    const linkPage = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(`<a href="${other.url}">go there</a>`));
+    await new Promise<void>((resolve) => linkPage.listen(0, '127.0.0.1', resolve));
+    const port = (linkPage.address() as { port: number }).port;
+    const strict = await launchBrowser([`127.0.0.1:${port}`]); // only the link page
+    try {
+      await strict.open(`http://127.0.0.1:${port}/`);
+      expect(await strict.snapshot()).toContain('go there');
+      await strict.click('link', 'go there').catch(() => {}); // the click itself may report the failed navigation
+      expect(await strict.snapshot()).not.toContain('Add visitor'); // the other page never arrived
+      await expect(strict.open(other.url)).rejects.toThrow(); // and the browser refuses it directly too
+    } finally {
+      await strict.close();
+      await new Promise<void>((resolve) => linkPage.close(() => resolve()));
+      await other.close();
     }
   });
 });
