@@ -1172,6 +1172,25 @@ Run: `QA_AGENT_MODEL=claude-sonnet-5-5 npm run eval -- --bugs=all --inject=actio
 
 **What we learn.** With the same code, prompt, page and budget, the stronger model found every planted bug in every run and stopped when it was finished. In steps 6d to 11 the prompt and tool changes moved the Haiku result by a bug or less; the change of model moved it by 0.7 of a bug per run, and the early stops disappeared. This is one comparison, 6 runs per model, and two things differ from step 11 (the model and the canary note), so I do not claim a number. In steps 10a and 10b the note did not change the bug numbers of Haiku, which is why I read the difference as the model. The measuring is also now at its limit: with 4 of 4 bugs in 6 of 6 runs, the eval can no longer tell two versions of Sonnet apart. To use it for more changes, the agent would need harder bugs (each independent, see lesson 7) or a cheaper model to be tested on.
 
+## Step 16: no "limited number of steps" in the prompt, the plan (written before the runs)
+
+**Why:** in step 11 (Haiku, budget 120,000) 3 of 6 runs ended by themselves early, at steps 8, 10 and 14, and wrote things like "I stopped here after testing the main rules"; in step 10b one run wrote "I stopped before finishing the threshold checks because of the step limit" at step 10 of 25. The last rule of the system prompt said "You have a limited number of steps." Lesson 2 (step 6d) showed that a limit in the prompt is read as a target. This sentence has no number, but it may still push the model to stop. Sonnet (step 12) did not stop early with the same sentence, so the effect, if any, is a Haiku one.
+
+**The change:** the words "You have a limited number of steps." are removed. The rest of the rule stays: "When you have tested enough, stop calling tools and write a short summary." Nothing else changes (code, tools, page, limits: 25 steps, 120,000 tokens).
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6` with Haiku, no canary. Baseline: step 11 (same everything except this sentence): 3.3 of 4 bugs per run, `decimal-age-accepted` 2 of 6, 13.8 steps, 81,433 tokens per run, 5 of 6 ended on `done` (3 of them early, before step 15), 1 on the budget, 0 false alarms.
+
+**Guesses (written before measuring):**
+
+1. Runs that end on `done` before step 12: 0 to 2 of 6 (step 11: 2 of 6, at steps 8 and 10; 3 of 6 before step 15).
+2. No run says it stopped because of a step limit or budget (step 11 and 10b had such sentences).
+3. Steps per run: 14 to 17 (step 11: 13.8).
+4. Runs that hit the 120,000 budget: 1 to 3 of 6 (step 11: 1). This is the cost side: without the sentence some runs may go on longer.
+5. Bugs found per run: 3.3 to 3.6 of 4; the decimal bug in 2 to 4 of 6.
+6. False alarms 0 or 1.
+
+**What this will not show:** 6 runs with one model. If the early stops disappear, it is a hint, not a proof; in step 11 they were 3 runs out of 6.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

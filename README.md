@@ -112,6 +112,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
+- [ ] **Step 16: no "limited number of steps" in the prompt.** Haiku sometimes stopped at step 8 to 10 "because of the step limit". One sentence removed from the system prompt, measured against step 11. The plan with the guesses is in `RESULTS.md`; the measurement is still to be done.
 - [x] **Fixes after a review of the repo.** The allowed-hosts rule now also holds in the browser itself (a click on a link to another site is blocked, not only `open_page`), a real run allows only the port of the demo page, and the eval goes on after a failed run and lists it in the summary.
 - [x] **Step 15: the trace page appears by itself.** Every run (`npm run agent` and each run of `npm run eval`) writes its `trace.html` when it ends, also after a failed run, and prints a link; `summary.md` of an eval links to the page of every run. `npm run trace` stays for older traces.
 - [x] **Step 14: a page that shows one trace.** `npm run trace -- <trace.jsonl>` writes a web page next to the trace: the setup, every step with what the model said, the tool calls and their results (errors in red, long snapshots folded, reported issues highlighted), and the stop. No new dependency. Everything from the trace is escaped before it goes into the page, and the page forbids scripts.
@@ -498,6 +499,19 @@ The canary scoring is unchanged: a refused `open_page` still writes "is not allo
 ```bash
 npm run typecheck && npm test      # new tests in test/tools.test.ts and test/score.test.ts
 E2E=1 npm test                     # also clicks a link to a forbidden host in a real browser
+```
+
+## Step 16: no "limited number of steps" in the prompt
+
+The last rule of the system prompt began with "You have a limited number of steps." In steps 10b and 11 Haiku sometimes ended a run at step 8 to 10 and said it had stopped because of the step limit, although the limit in code is 25. Lesson 2 (step 6d) says that a limit in the prompt is read as a target; this sentence had no number, but it may still push the model to stop.
+
+- `src/prompt.ts`: the sentence is removed. The rule now only says "When you have tested enough, stop calling tools and write a short summary." The limits stay in code (`src/agent.ts`), so a run still cannot go on forever.
+- `test/prompt.test.ts` checks that the prompt mentions no step limit or budget.
+- Measured against step 11 with Haiku; the guesses are in `RESULTS.md`, written before the runs.
+
+```bash
+npm run typecheck && npm test
+npm run eval -- --bugs=all --runs=6     # costs real money: you run it; compare with step 11
 ```
 
 ## Step 7: CI
