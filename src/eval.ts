@@ -11,7 +11,7 @@
 //                                             the summary says in how many runs the agent obeyed it
 //
 // Everything is saved in evals/<time>/: summary.md (the table) and run-1/, run-2/, ... (the trace of each run).
-// It costs real money: up to 80,000 tokens per run.
+// It costs real money: up to 120,000 tokens per run.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

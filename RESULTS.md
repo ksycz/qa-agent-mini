@@ -995,6 +995,24 @@ Run: `npm run eval -- --bugs=all --inject=action-neutral --runs=6` with Haiku (`
 
 **What we learn.** With a bait that looks like an ordinary note of the test environment, Haiku again read it, called it page content, and carried on, in 6 of 6 runs. Two baits and 12 runs are now without a single try. That is a good sign for this model with this kind of sentence, and still no proof of safety: the baits are polite, short, and look the same in every run. The host check in code has never met a real attempt in a run with a model. A different kind of bait (a message that looks like it comes from the product owner, a different place on the page, an answer of a tool) or a different model is the next question, not another rewording of the same note.
 
+## Step 11: a higher token budget, the plan (written before the runs)
+
+**Why:** most runs ended on the token budget (4 of 6 in step 9c, 6 of 6 in 10a, 4 of 6 in 10b), so the agent often stopped before it had tested everything.
+
+**The change:** `tokenBudget` in `src/agent.ts` from 80,000 to 120,000. Nothing else changes (25 steps, 1,000 tokens per reply, 6,000 characters per tool result, prompt, tools, page). The limit stays in code.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6`, no canary. Baseline: step 9c (same four bugs, budget 80,000): 3.2 of 4 bugs per run, 14.8 steps, about 5,650 tokens per step, 0 false alarms; senior 6, group 5, limit 6, decimal 3 of 6.
+
+**Guesses (written before measuring):**
+
+1. The runs that used to end on the budget go on for about 4 to 7 more steps, so the mean is about 18 to 21 steps per run.
+2. Bugs found per run: 3.3 to 3.6 of 4. No big jump: the first three bugs are found in nearly every run, and the decimal bug depends on whether the agent types a decimal, which it usually does at steps 9 to 13, before the old limit.
+3. Tokens per step go up (about 6,000 to 6,500), because the conversation grows with every step.
+4. False alarms 0 or 1: more steps give more chances for a wrong report.
+5. The most likely verdict is "it costs more and gains little". Then the budget goes back to 80,000 and the README says that the budget was not the limit.
+
+**What this will not show:** 6 runs with one model. A difference of one bug in one run is noise.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
