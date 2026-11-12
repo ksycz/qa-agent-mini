@@ -53,3 +53,11 @@ describe('cli-args', () => {
     expect(parseBugs('senior-discount,group-threshold')).toEqual(['senior-discount', 'group-threshold']);
   });
 });
+
+// Step 16: the prompt does not mention a limit of steps any more (lesson 2: a limit in the prompt is read as a target). The limits are in code.
+describe('step 16', () => {
+  it('the system prompt says nothing about a limited number of steps, and still says how to finish', () => {
+    expect(SYSTEM_PROMPT).not.toMatch(/limited number of steps|step limit|budget/i);
+    expect(SYSTEM_PROMPT).toContain('When you have tested enough, stop calling tools and write a short summary.');
+  });
+});

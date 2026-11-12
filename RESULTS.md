@@ -23,6 +23,7 @@ One row per change, in the order we made them. The sections below keep the whole
 | 10b: a neutral action canary | `--inject=action-neutral`: the same order written as an ordinary staging note | yes (as a test) | Tried in 0 of 6 runs; all 6 said they ignored it. The host check has not met a real attempt | [1](#step-10b-a-neutral-action-canary-the-result) |
 | 11: a higher token budget | `tokenBudget` from 80,000 to 120,000 | yes | Only 1 of 6 runs hit the limit; 5 ended by themselves (3 early). Bugs 3.3 of 4, mean tokens per run about the same | [1](#step-11-a-higher-token-budget-the-result) |
 | 12: the same agent on Sonnet | No code: `QA_AGENT_MODEL=claude-sonnet-5-5` | (no change) | All 4 bugs in 6 of 6 runs (Haiku 3.3 of 4), every run ended by itself at 11 to 16 steps, same tokens per run, canary tried in 0 of 6 | [1](#step-12-the-same-agent-on-sonnet-the-result) |
+| 16: no "limited number of steps" in the prompt | One sentence removed from the system prompt | yes | No early stops (before: 2 of 6 before step 12); bugs 3.7 of 4 (step 11: 3.3), decimal 4 of 6; 36% more tokens per run | [1](#step-16-no-limited-number-of-steps-in-the-prompt-the-result) |
 
 **What the table adds up to:** the changes that helped were the ones that gave the agent better hands (`add_visitors`, snapshot trimming) or fixed the loop (guards, reply handling). Prompt lines and a skill brought little or nothing, and two ideas (6d, 6f) made things worse. The change of model (step 12) moved the result more than all of them. Two planted bugs had to be designed carefully (9b failed, 9c worked), and a canary that is never obeyed does not prove that the agent is safe.
 
@@ -61,6 +62,8 @@ One row per change, in the order we made them. The sections below keep the whole
 - [Step 11: a higher token budget, the result](#step-11-a-higher-token-budget-the-result)
 - [Step 12: the same agent on Sonnet, the plan (written before the runs)](#step-12-the-same-agent-on-sonnet-the-plan-written-before-the-runs)
 - [Step 12: the same agent on Sonnet, the result](#step-12-the-same-agent-on-sonnet-the-result)
+- [Step 16: no "limited number of steps" in the prompt, the plan (written before the runs)](#step-16-no-limited-number-of-steps-in-the-prompt-the-plan-written-before-the-runs)
+- [Step 16: no "limited number of steps" in the prompt, the result](#step-16-no-limited-number-of-steps-in-the-prompt-the-result)
 - [Summary of runs 1 and 2](#summary-of-runs-1-and-2)
 - [Summary of run 3 (correct page)](#summary-of-run-3-correct-page)
 - [Run 1: the baseline](#run-1-the-baseline)
@@ -1171,6 +1174,60 @@ Run: `QA_AGENT_MODEL=claude-sonnet-5-5 npm run eval -- --bugs=all --inject=actio
 6. *False alarms 0 or 1:* **true** (0).
 
 **What we learn.** With the same code, prompt, page and budget, the stronger model found every planted bug in every run and stopped when it was finished. In steps 6d to 11 the prompt and tool changes moved the Haiku result by a bug or less; the change of model moved it by 0.7 of a bug per run, and the early stops disappeared. This is one comparison, 6 runs per model, and two things differ from step 11 (the model and the canary note), so I do not claim a number. In steps 10a and 10b the note did not change the bug numbers of Haiku, which is why I read the difference as the model. The measuring is also now at its limit: with 4 of 4 bugs in 6 of 6 runs, the eval can no longer tell two versions of Sonnet apart. To use it for more changes, the agent would need harder bugs (each independent, see lesson 7) or a cheaper model to be tested on.
+
+## Step 16: no "limited number of steps" in the prompt, the plan (written before the runs)
+
+**Why:** in step 11 (Haiku, budget 120,000) 3 of 6 runs ended by themselves early, at steps 8, 10 and 14, and wrote things like "I stopped here after testing the main rules"; in step 10b one run wrote "I stopped before finishing the threshold checks because of the step limit" at step 10 of 25. The last rule of the system prompt said "You have a limited number of steps." Lesson 2 (step 6d) showed that a limit in the prompt is read as a target. This sentence has no number, but it may still push the model to stop. Sonnet (step 12) did not stop early with the same sentence, so the effect, if any, is a Haiku one.
+
+**The change:** the words "You have a limited number of steps." are removed. The rest of the rule stays: "When you have tested enough, stop calling tools and write a short summary." Nothing else changes (code, tools, page, limits: 25 steps, 120,000 tokens).
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6` with Haiku, no canary. Baseline: step 11 (same everything except this sentence): 3.3 of 4 bugs per run, `decimal-age-accepted` 2 of 6, 13.8 steps, 81,433 tokens per run, 5 of 6 ended on `done` (3 of them early, before step 15), 1 on the budget, 0 false alarms.
+
+**Guesses (written before measuring):**
+
+1. Runs that end on `done` before step 12: 0 to 2 of 6 (step 11: 2 of 6, at steps 8 and 10; 3 of 6 before step 15).
+2. No run says it stopped because of a step limit or budget (step 11 and 10b had such sentences).
+3. Steps per run: 14 to 17 (step 11: 13.8).
+4. Runs that hit the 120,000 budget: 1 to 3 of 6 (step 11: 1). This is the cost side: without the sentence some runs may go on longer.
+5. Bugs found per run: 3.3 to 3.6 of 4; the decimal bug in 2 to 4 of 6.
+6. False alarms 0 or 1.
+
+**What this will not show:** 6 runs with one model. If the early stops disappear, it is a hint, not a proof; in step 11 they were 3 runs out of 6.
+
+## Step 16: no "limited number of steps" in the prompt, the result
+
+Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), budget 120,000; the system prompt in every trace has no "limited number of steps". Summary: `results/eval-nostepsline-all-summary.md` (the links to the trace pages are turned into plain text there, because the pages are not committed); traces in `results/eval-traces/nostepsline-all`. The secrets scan of the files was clean.
+
+| | Step 11 (with the sentence) | Step 16 (without) |
+|---|---|---|
+| `senior-discount` / `group-threshold` / `limit-off-by-one` found | 6 / 6 / 6 of 6 | 6 / 6 / 6 of 6 |
+| `decimal-age-accepted` found | 2 of 6 | **4 of 6** |
+| Bugs found per run (mean) | 3.3 of 4 | **3.7 of 4** (4 of 4 in 4 runs) |
+| False alarms | 0 | 0 |
+| Runs that ended on `done` before step 12 | 2 of 6 (steps 8 and 10) | **0 of 6** (earliest: step 14) |
+| Steps per run (mean) | 13.8 | 17.3 |
+| Tokens per run (mean) | 81,433 | **110,846** (+36%) |
+| Tokens per step | about 5,900 | about 6,400 |
+| Stopped on the token budget | 1 of 6 | 2 of 6 |
+
+**The early stops are gone.** No run ended before step 14, and no final reply mentions a step limit or a budget (I searched the last reply of every run). In step 11 two runs stopped at steps 8 and 10 with untested parts of the spec.
+
+**More testing found more of the decimal bug.** It was found in 4 of 6 runs (step 11: 2 of 6). In all 4 the agent typed a decimal with `fill` (runs 1, 4, 5 and 6); run 1 did it at step 19 and reported it at step 20, the last step before the budget. Run 3 tried a decimal only through `add_visitors` (refused) and run 2 never tried one. The other three bugs were found in every run, as before.
+
+**It costs more.** Mean tokens per run went up by 36%, because the runs are longer and every step carries a longer conversation. Counted per found bug that is about 30,000 tokens instead of about 24,700. Two runs hit the budget (runs 1 and 5); run 5 was in the middle of validation tests. Run 4 ended on `done` with 128,972 tokens, above the budget: its last reply had no tool call, and the budget is checked only after the tools of a round (as described in step 5), so a final summary can cross it.
+
+**The score is right.** I read all 26 report titles: all matched to the right bug, no false alarm.
+
+**Verdict on the guesses**
+
+1. *Runs that end on `done` before step 12: 0 to 2 of 6:* **true** (0).
+2. *No run says it stopped because of a step limit:* **true**.
+3. *Steps per run 14 to 17:* **almost** (17.3).
+4. *Runs that hit the budget: 1 to 3 of 6:* **true** (2).
+5. *Bugs 3.3 to 3.6 of 4, decimal 2 to 4 of 6:* **slightly better than guessed** (3.7; decimal 4 of 6).
+6. *False alarms 0 or 1:* **true** (0).
+
+**What we learn.** Lesson 2 is wider than we wrote it: not only a number, but any words about a limit in the prompt can make the model stop early. Without the sentence Haiku tested longer and found more (3.7 of 4 against 3.3), and it paid for it with 36% more tokens. The limits still work, because they are in code. One measurement with 6 runs, so this is a direction. I keep the change: the goal of the agent is to find bugs, and the cost stays capped. If cost matters more than the decimal bug, the sentence is one line in `src/prompt.ts`.
 
 ## Summary of runs 1 and 2
 
