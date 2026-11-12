@@ -3,7 +3,8 @@
 // It lives in its own file because two commands need it:
 //   npm run agent   (src/run.ts)   one run, printed step by step
 //   npm run eval    (src/eval.ts)  several runs in a row, scored (step 6)
-// Both save the same files in the folder they are given: trace.jsonl and result.json.
+// Both save the same files in the folder they are given: trace.jsonl, result.json and (step 15) trace.html,
+// a page that shows the trace.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ import { folderSkillStore } from './skills';
 import type { InjectKind } from './cli-args';
 import { startTarget } from './serve-target';
 import { fileTrace } from './trace';
+import { writeTracePage } from './trace-page';
 
 export async function runOnce(opts: {
   bugs: string[]; // which planted bugs the page has (an empty list = a correct page)
@@ -50,5 +52,12 @@ export async function runOnce(opts: {
     // Always clean up, even if something above failed.
     await browser.close();
     await target.close();
+    // Step 15: write the page that shows the trace, also after a failed run, because then it is needed most.
+    // A problem here must never hide the real error of the run, so it is only noted.
+    try {
+      writeTracePage(join(dir, 'trace.jsonl'));
+    } catch (e) {
+      log?.(`Could not write the trace page: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }

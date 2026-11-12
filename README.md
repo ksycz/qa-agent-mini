@@ -84,8 +84,8 @@ Read the files in this order:
 20. `.github/workflows/ci.yml`: what runs on every pull request (step 7).
 21. `src/skills.ts` and `skills/boundary-value-testing/SKILL.md`: the skills (step 8).
 22. `src/trim-snapshots.ts`: cuts old page snapshots out of what the model sees (step 6c). `src/cli-args.ts`: reads the options `--bugs`, `--runs` and `--inject`.
-23. `src/trace-to-html.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (step 14). Run it with `npm run trace -- <trace.jsonl>`.
-24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts` and `test/secrets.test.ts` (no API key in the repo).
+23. `src/trace-to-html.ts`, `src/trace-page.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (steps 14 and 15). Every run writes its page by itself; for an older trace run `npm run trace -- <trace.jsonl>`.
+24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 
 ## Roadmap
 
@@ -112,6 +112,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
+- [x] **Step 15: the trace page appears by itself.** Every run (`npm run agent` and each run of `npm run eval`) writes its `trace.html` when it ends, also after a failed run, and prints a link; `summary.md` of an eval links to the page of every run. `npm run trace` stays for older traces.
 - [x] **Step 14: a page that shows one trace.** `npm run trace -- <trace.jsonl>` writes a web page next to the trace: the setup, every step with what the model said, the tool calls and their results (errors in red, long snapshots folded, reported issues highlighted), and the stop. No new dependency. Everything from the trace is escaped before it goes into the page, and the page forbids scripts.
 - [x] **Step 13: wrap-up.** An overview table of all steps at the top of `RESULTS.md`, "Results in short" and lesson 9 in this README. The open ideas of the old "Step 9: make it better" item moved to "Ideas for later (not planned)", and nothing more is planned.
 
@@ -463,6 +464,22 @@ How it is built:
 
 ```bash
 npm run typecheck && npm test      # new tests in test/trace-to-html.test.ts
+```
+
+## Step 15: the trace page appears by itself
+
+In step 14 you had to run `npm run trace` for every trace. Now the page is part of the result of a run.
+
+- **After every run** (`npm run agent`, and every run inside `npm run eval`) `trace.html` is written next to `trace.jsonl`. `npm run agent` prints a link to it at the end (`file:///.../trace.html`, clickable in most terminals).
+- **Also after a failed run**, because then you need to read the trace most. If there is no trace file at all (the run failed before it wrote anything), no page is written. A problem while writing the page is only noted: it never hides the real error of the run.
+- **In an eval,** `summary.md` ends with a line of links, one per run (`[run 1](run-1/trace.html)`), so you can click from the table to the run that looks strange. The links are relative, so they work when the folder is moved or zipped.
+- `npm run trace -- <trace.jsonl>` stays for traces of older runs. The file work lives in `src/trace-page.ts` (tested in `test/trace-page.test.ts` with a temporary folder); `src/trace-to-html.ts` is still only text in, text out.
+- The pages are ignored by git. They are local reading aids, like `runs/` and `evals/`.
+
+```bash
+npm run typecheck && npm test      # new tests in test/trace-page.test.ts
+E2E=1 npm test
+npm run agent                      # costs real money: you run it; it prints the link to the page at the end
 ```
 
 ## Step 7: CI

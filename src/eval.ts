@@ -19,6 +19,7 @@ import { DEFAULT_LIMITS } from './agent';
 import { flag, parseBugs, parseInject, parseRuns } from './cli-args';
 import { runOnce } from './run-once';
 import { summarize, toRunStats, type RunStats } from './score';
+import { tracePageLinks } from './trace-page';
 
 const bugs = parseBugs(flag('bugs'));
 const inject = parseInject();
@@ -56,7 +57,8 @@ try {
 }
 
 if (stats.length > 0) {
-  const summary = summarize(stats, bugs, inject);
+  const links = tracePageLinks(dir); // step 15: every run wrote a page; the summary links to them
+  const summary = summarize(stats, bugs, inject) + (links ? `\n\n${links}` : '');
   writeFileSync(join(dir, 'summary.md'), summary + '\n');
   console.log(`\n${summary}\n\nSaved in ${dir}/`);
 }
