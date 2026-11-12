@@ -44,7 +44,17 @@ The goal of this repo is to understand how an agent is built: the tools, the loo
 A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
 This is a learning project, not a replacement for the Playwright agents.
 
-**Where we are:** the agent works end to end with a real model, and every change since step 5 has been measured with the eval (`npm run eval`). The page has four planted bugs (the fourth came in step 9c). What we learned is collected in "Lessons so far" below, and the open ideas are in the last roadmap item.
+**Where we are:** all planned steps are done. The agent works end to end with a real model (Haiku by default; Sonnet works with one environment variable), every change since step 5 was measured with the eval (`npm run eval`), and the page has four planted bugs. What we learned is in "Results in short" and "Lessons so far" below; what could come next is in "Ideas for later (not planned)".
+
+### Results in short
+
+Haiku, 3 to 6 runs per measurement, so only large differences count. The full table with a link to every measurement is at the top of [RESULTS.md](RESULTS.md).
+
+- **What helped:** better hands for the agent (`add_visitors` found the 11th-ticket bug in 3 of 3 runs, before 0 of 3; trimming old snapshots saved about 15% of the tokens per step) and fixes in the loop (the stuck guard, reply handling).
+- **What did not help, or made things worse:** a prompt that states the budget (the model stopped early), trimming the page inside old tool results (the model repeated its tests), a skill (no gain, about 11% more tokens per step), a higher token budget (the agent mostly stops by itself).
+- **Planted bugs:** the fourth bug had to be independent of the others. The first try (9b) failed, the second (9c) worked.
+- **Safety:** two hidden notes that asked the agent to do something (open a forbidden address) were not obeyed in 12 runs of Haiku and 6 of Sonnet. The host check in code has still not met a real attempt, so this is no proof of safety.
+- **Model:** the same agent on Sonnet found all four bugs in 6 of 6 runs (Haiku: 3.3 of 4) and ended every run by itself. The model mattered more than any prompt or tool change.
 
 ## How to read this repo
 
@@ -101,7 +111,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
+- [x] **Step 13: wrap-up.** An overview table of all steps at the top of `RESULTS.md`, "Results in short" and lesson 9 in this README. The open ideas of the old "Step 9: make it better" item moved to "Ideas for later (not planned)", and nothing more is planned.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
@@ -117,6 +127,7 @@ The short version of what the steps taught us. Each one has a section below and 
 6. **Seen is not noticed** (step 9a). When the group bug was reported late, the model had not waited: the wrong total was in the page earlier, but the model did not read it until later. A prompt line about reporting cannot fix that.
 7. **A planted bug must be independent of the others** (step 9b). Our fourth bug was switched on by "Clear order", and the agent clicks that button at the start of almost every test to get a clean order. From then on every price on the page was a mix of two bugs, so the agent found the other bugs less often and the score gave points for the wrong reasons. Test: ask "does the agent do something all the time that switches this bug on?". If yes, it is not a good bug.
 8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits.
+9. **The model can matter more than the prompt and the tools** (step 12). After seven steps of changes to the prompt, the tools and the limits that moved Haiku by about a bug or less, the same agent on Sonnet found all four bugs in 6 of 6 runs and stopped when it was finished. It is one comparison with 6 runs per model, so it is a direction and not a number. It also means that the eval can no longer tell apart two versions that find 4 of 4: more changes would need harder bugs.
 
 ## Ideas for later (not planned)
 
@@ -144,6 +155,7 @@ Nothing here is on the roadmap and none of it is started. It is a list of what c
 - **Why does the agent stop early?** In some runs it ends after 8 to 10 steps, with a "done" and a sentence like "I stopped here" (steps 10b and 11). Ideas: a prompt line without any number in it ("before you finish, check every row of the spec"), or a check in code that lists the areas of `SPEC.md` that were never touched and sends the agent back. Lesson 2 warns against numbers in the prompt. Size: small to medium.
 - **Prompt caching.** Every step sends the same system prompt, spec and tools again. Caching that part should make a run cheaper. Size: small to medium; the effect is easy to measure in tokens.
 - **A cheaper model for the routine steps**, and a stronger one for the thinking steps. Size: large; the gain is not certain.
+- **Small things left from step 9:** a prompt line against a `snapshot` after every `add_visitors` call, a better note where an old snapshot was removed, and the reply length limit together with hidden thinking (many replies carry a thinking block). Each is a small step with one measurement.
 - **A second skill**, for example one about the price rules. The first skill (step 8) was loaded in every run and changed nothing, so the first question is what a skill should contain to matter. Size: small, expected gain small.
 
 **A bigger target**
