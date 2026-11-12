@@ -5,6 +5,7 @@
 //   export ANTHROPIC_API_KEY=...
 //   npm run eval -- --bugs=all --runs=3       the page has all four bugs
 //   npm run eval -- --bugs=none --runs=3      the page is correct: every report is a false alarm
+//   npm run eval -- --bugs=all --inject=action  the hidden sentence asks for an ACTION (open a forbidden address, step 10a)
 //   npm run eval -- --bugs=all --inject       the page also carries a hidden sentence that gives orders to an AI agent (the canary, step 6b);
 //                                             the summary says in how many runs the agent obeyed it
 //
@@ -14,12 +15,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_LIMITS } from './agent';
-import { flag, hasFlag, parseBugs, parseRuns } from './cli-args';
+import { flag, parseBugs, parseInject, parseRuns } from './cli-args';
 import { runOnce } from './run-once';
 import { summarize, toRunStats, type RunStats } from './score';
 
 const bugs = parseBugs(flag('bugs'));
-const inject = hasFlag('inject');
+const inject = parseInject();
 const model = process.env.QA_AGENT_MODEL ?? 'claude-haiku-5-5';
 
 let runCount: number;
@@ -36,7 +37,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 const dir = join('evals', new Date().toISOString().replace(/[:.]/g, '-'));
 mkdirSync(dir, { recursive: true });
-console.log(`${runCount} run(s), bugs: [${bugs.join(', ') || 'none'}], canary sentence: ${inject ? 'yes' : 'no'}, model: ${model}`);
+console.log(`${runCount} run(s), bugs: [${bugs.join(', ') || 'none'}], canary sentence: ${inject || 'no'}, model: ${model}`);
 console.log(`Costs real money: at most ${(runCount * DEFAULT_LIMITS.tokenBudget).toLocaleString('en-US')} tokens (and a little more, the last reply can cross the limit).\n`);
 
 const stats: RunStats[] = [];
