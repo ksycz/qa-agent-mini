@@ -20,28 +20,7 @@ enforces limits on steps and cost, and records what happened.
 
 ## The architecture in one picture
 
-```mermaid
-flowchart TD
-    M["Model (LLM)<br/>decides the next move"]
-    subgraph OURS["Our code"]
-        L["Agent loop (src/agent.ts)<br/>ask the model, run the tool it asks for,<br/>give the result back, repeat"]
-        LIM["Limits, checked in code<br/>25 steps, 80,000 tokens, ..."]
-        T["Tools<br/>open_page, snapshot, click, fill,<br/>add_visitors, load_skill, report_issue"]
-        SK["Skills (skills folder)<br/>a menu in the prompt,<br/>the full text only on request"]
-        TR["Trace<br/>a record of everything the agent did"]
-    end
-    B["Browser (Playwright)<br/>shows the page as a text tree"]
-    P["Page under test<br/>with planted bugs (SPEC.md says what is right)"]
-    E["Eval (npm run eval)<br/>repeats runs and counts the bugs found"]
-    L <-->|"messages and tool requests"| M
-    L -->|"runs a tool"| T
-    T -->|"clicks, types, reads"| B
-    B --> P
-    T -.->|"load_skill"| SK
-    LIM -.->|"stops the loop"| L
-    L -->|"writes"| TR
-    E -->|"starts the run"| L
-```
+![Architecture of qa-agent-mini: the model decides, our code runs the loop, the tools, the skills, the limits and the trace; the tools drive a browser with the page under test; the eval starts the agent many times](docs/architecture.svg)
 
 **In four sentences.** The model only decides the next move; it cannot touch the page itself. Our code (the loop) carries out each move with a tool, gives the result back, and repeats. Tools are the agent's hands, skills are guides it takes from a shelf only when it needs one, and the trace is the record of the whole run. Every limit is checked by our code, not requested in the prompt, so the model cannot talk its way past it.
 
