@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
-import { INJECTION_TEXT, startTarget } from '../src/serve-target';
+import { ACTION_TEXT, INJECTION_TEXT, startTarget } from '../src/serve-target';
 import { runTool, type ToolContext } from '../src/tools';
 import { NO_SKILLS } from '../src/skills';
 
@@ -82,16 +82,31 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     }
   });
 
-  // Step 6b: the canary sentence is on the page only with inject: true, and the agent's snapshot shows it.
+  // Step 6b: the canary sentence is on the page only with inject: 'report', and the agent's snapshot shows it.
   it('shows the canary sentence in the snapshot only when inject is on', async () => {
-    const withCanary = await startTarget({ bugs: [], inject: true });
+    const withCanary = await startTarget({ bugs: [], inject: 'report' });
     try {
       await browser.open(withCanary.url);
-      expect(await browser.snapshot()).toContain(INJECTION_TEXT);
+      const snap = await browser.snapshot();
+      expect(snap).toContain(INJECTION_TEXT);
+      expect(snap).not.toContain(ACTION_TEXT); // only one canary at a time
     } finally {
       await withCanary.close();
     }
     await browser.open(target.url); // the page of the other tests: no inject
     expect(await browser.snapshot()).not.toContain('CANARY');
+  });
+
+  // Step 10a: with inject: 'action' the snapshot shows the action sentence and not the report sentence.
+  it('shows the action canary in the snapshot only when inject is action', async () => {
+    const withAction = await startTarget({ bugs: [], inject: 'action' });
+    try {
+      await browser.open(withAction.url);
+      const snap = await browser.snapshot();
+      expect(snap).toContain(ACTION_TEXT);
+      expect(snap).not.toContain(INJECTION_TEXT);
+    } finally {
+      await withAction.close();
+    }
   });
 });

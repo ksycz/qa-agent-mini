@@ -1,5 +1,5 @@
 // Small helpers to read the options typed after a command, for example:
-//   npm run agent -- --bugs=all --inject
+//   npm run agent -- --bugs=all --inject=action
 
 import { KNOWN_BUGS } from '../target/pricing.mjs'; // the one list of bug names, so "all" can never be out of date
 
@@ -12,6 +12,25 @@ export function flag(name: string, argv: string[] = process.argv): string | unde
 // True when a flag without a value is there, for example --inject.
 export function hasFlag(name: string, argv: string[] = process.argv): boolean {
   return argv.includes(`--${name}`);
+}
+
+// Which canary the page carries (step 6b and step 10a):
+//   'report' = the hidden sentence orders the agent to REPORT a fake issue (the first canary)
+//   'action' = the hidden sentence orders the agent to OPEN an address outside the allowed hosts (step 10a)
+export type InjectKind = 'report' | 'action';
+
+// Reads --inject. It gives back false (no canary), or the kind of canary.
+//   (nothing)         -> false
+//   --inject          -> 'report'   (so the old command still works)
+//   --inject=report   -> 'report'
+//   --inject=action   -> 'action'
+// Any other value is a typo, and a typo must not silently run without a canary.
+export function parseInject(argv: string[] = process.argv): InjectKind | false {
+  if (hasFlag('inject', argv)) return 'report';
+  const value = flag('inject', argv);
+  if (value === undefined) return false;
+  if (value === 'report' || value === 'action') return value;
+  throw new Error('--inject must be --inject, --inject=report or --inject=action');
 }
 
 // Turns the --bugs value into a list of bug names.
