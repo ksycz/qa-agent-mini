@@ -491,6 +491,8 @@ A review of the whole repo after step 15 found no broken behaviour in the runs w
 - **"127.0.0.1" meant any port on this computer**, so the agent could have opened another local service. A real run (`runOnce`, `npm run hands`, `npm run loop`) now allows only the host and the port of the demo page (an entry such as `127.0.0.1:4173`). Only `http` and `https` addresses are allowed.
 - **The eval stopped at the first failed run**, and the summary did not say that a run had failed. Now the other runs go on, the table keeps the real run numbers, and the summary lists the failed runs with their error. With a wrong API key it stops at once, because every run would fail the same way.
 
+Small fixes from the same review, in a second pull request: the canary scoring compares the whole host name (an address that only mentions `canary.invalid` in its query is not a try), `npm run agent` prints the link to the trace page only when the page exists, `--inject` given in two forms at once is an error, `add_visitors` reads the page once per visitor instead of twice when the page shows a message, and the test for API keys also reads `skills/`, `docs/`, `.github/`, `.claude/` and `package.json`.
+
 The canary scoring is unchanged: a refused `open_page` still writes "is not allowed" to the trace. A request blocked by the browser itself (for example after a click) is not counted by the eval yet.
 
 ```bash

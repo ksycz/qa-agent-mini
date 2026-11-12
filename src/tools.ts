@@ -165,9 +165,10 @@ async function addVisitors(ctx: ToolContext, agesText: string): Promise<string> 
     added++;
     // Read the page after EVERY click (this is local and costs no tokens), because the next click would
     // erase the message. If the page said something, stop and give the message to the model.
-    const message = findAlert(await ctx.browser.snapshot());
+    const snapshot = await ctx.browser.snapshot();
+    const message = findAlert(snapshot);
     if (message !== '') {
-      const page = cutSnapshot(await ctx.browser.snapshot(), ctx.maxSnapshotChars);
+      const page = cutSnapshot(snapshot, ctx.maxSnapshotChars); // the same snapshot: the page has not changed since
       return `Stopped after age ${age} (${added} of ${pieces.length}). The page says: ${message}\nThe remaining ages were not added.\n${page}`;
     }
   }

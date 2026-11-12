@@ -152,3 +152,18 @@ describe('add_visitors', () => {
     expect(log).toEqual([]); // nothing was typed anywhere
   });
 });
+
+// After the review: add_visitors reads the page once after each click, not twice when the page shows a message.
+describe('add_visitors reads the page once per visitor', () => {
+  it('takes one snapshot per added visitor when the page shows a message', async () => {
+    let snapshots = 0;
+    const c = ctx();
+    c.browser.snapshot = async () => {
+      snapshots++;
+      return '- alert: Maximum 10 tickets per order.';
+    };
+    const out = await runTool(c, 'add_visitors', { ages: '30, 31' });
+    expect(out).toContain('Stopped after age 30 (1 of 2)');
+    expect(snapshots).toBe(1);
+  });
+});

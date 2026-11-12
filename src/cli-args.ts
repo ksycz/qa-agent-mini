@@ -28,8 +28,10 @@ export type InjectKind = 'report' | 'action' | 'action-neutral';
 //   --inject=action-neutral -> 'action-neutral'
 // Any other value is a typo, and a typo must not silently run without a canary.
 export function parseInject(argv: string[] = process.argv): InjectKind | false {
-  if (hasFlag('inject', argv)) return 'report';
   const value = flag('inject', argv);
+  // Both forms at once ("--inject --inject=action") would be a guess either way, so it is an error.
+  if (hasFlag('inject', argv) && value !== undefined) throw new Error('Give --inject only once: --inject, --inject=report, --inject=action or --inject=action-neutral');
+  if (hasFlag('inject', argv)) return 'report';
   if (value === undefined) return false;
   if (value === 'report' || value === 'action' || value === 'action-neutral') return value;
   throw new Error('--inject must be --inject, --inject=report, --inject=action or --inject=action-neutral');
