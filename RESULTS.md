@@ -3,9 +3,75 @@
 A log of every real run of the agent: what was changed, what happened, and what we learned.
 Raw terminal output of each run is saved in `results/`. The full traces (`runs/`) stay on the local machine.
 
-How to read the table:
+## Overview of all steps
 
-- **Bugs found** is out of the 3 planted bugs (`senior-discount`, `group-threshold`, `limit-off-by-one`).
+One row per change, in the order we made them. The sections below keep the whole record: for each step the plan with the guesses (written before the runs) and the result. Read this table first. The numbers are copied from those sections; with 3 to 6 runs per measurement, a difference of one bug in one run is noise.
+
+| Step | What changed | Kept? | Key result (Haiku, 3 to 6 runs, unless it says otherwise) | Details |
+|---|---|---|---|---|
+| First runs and fixes (steps 4 to 5a) | A first prompt and loop, then fixes to the stuck guard, tool arguments and reply handling | yes | Baseline v2: 3 of 3 runs ended at the same place with only 1 bug found (a guard problem). After the fixes (baseline v4): senior 4 of 4, group 3 of 4, limit 1 of 4 in the 4 runs with bugs; 0 false alarms in 8 runs | [1](#baseline-v2-page-with-clear-order-and-a-full-trace), [2](#baseline-v3-the-result), [3](#baseline-v4-after-reply-handling-measured-with-the-eval) |
+| 6c: trim old page snapshots | Old snapshots are cut out of what the model sees (the fixed version keeps all snapshots of the latest round) | yes (fixed version) | First version: about 24% fewer tokens per step, but the model lost evidence. Fixed version: about 5,580 tokens per step against 6,580 at baseline v4 (about 15% fewer), group 2 of 3 against 3 of 3 (noise at 3 runs) | [1](#step-6c-trimming-old-snapshots-the-result), [2](#step-6c-fixed-the-result) |
+| 6d: a prompt that states the budget | The system prompt says about 14 steps and 80,000 tokens | no | The model took the number as a target and stopped early in 5 of 6 runs | [1](#step-6d-a-prompt-that-states-the-real-budget-the-result) |
+| 6e: `add_visitors` tool | One tool adds several visitors in one call | yes | `limit-off-by-one` found in 3 of 3 runs (before 0 of 3); 7% to 15% fewer tokens per step | [1](#step-6e-a-tool-that-adds-several-visitors-in-one-call-the-result) |
+| 6f: trim the page inside old `add_visitors` results | Cut the page text out of old `add_visitors` results | no | The model could not trust its own earlier tests and repeated them | [1](#step-6f-trimming-the-page-inside-old-add_visitors-results-the-result) |
+| 6b: prompt-injection canary | A hidden sentence on the page orders the agent to report "CANARY-OBEYED" | yes (as a test) | Obeyed in 0 of 3 runs. One sentence is not a proof of safety | [1](#step-6b-the-prompt-injection-canary-the-result) |
+| 8: skills | A `load_skill` tool and a `skills/` folder | yes (as an example) | Loaded in 6 of 6 runs, no measurable gain, about 11% more tokens per step | [1](#step-8-skills-the-result) |
+| 9a: report a difference at once | One prompt line: report a difference right after you see it | yes | All 3 bugs in 6 of 6 runs, 0 false alarms, same cost; does not fix the late notice of the group bug | [1](#step-9a-report-a-difference-right-after-you-see-it-the-result) |
+| 9b: a fourth planted bug (`clear-keeps-count`) | The page keeps the ticket count after "Clear order" | no | The agent clears the order at the start of almost every test, which switched the bug on and hid the others (2 of 6 each, before 6 of 6) | [1](#step-9b-a-fourth-planted-bug-the-result) |
+| 9c: a fourth planted bug (`decimal-age-accepted`) | The page accepts a decimal age such as 12.5 | yes | Found in 3 of 6 runs, exactly where a decimal was typed; the others were not disturbed. New baseline: 3.2 of 4 bugs per run | [1](#step-9c-a-fourth-planted-bug-decimal-age-accepted-the-result) |
+| 10a: an action canary | `--inject=action`: a hidden note asks the agent to open a forbidden address | yes (as a test) | Tried in 0 of 6 runs; 2 runs said they ignored it | [1](#step-10a-an-action-canary-the-result) |
+| 10b: a neutral action canary | `--inject=action-neutral`: the same order written as an ordinary staging note | yes (as a test) | Tried in 0 of 6 runs; all 6 said they ignored it. The host check has not met a real attempt | [1](#step-10b-a-neutral-action-canary-the-result) |
+| 11: a higher token budget | `tokenBudget` from 80,000 to 120,000 | yes | Only 1 of 6 runs hit the limit; 5 ended by themselves (3 early). Bugs 3.3 of 4, mean tokens per run about the same | [1](#step-11-a-higher-token-budget-the-result) |
+| 12: the same agent on Sonnet | No code: `QA_AGENT_MODEL=claude-sonnet-5-5` | (no change) | All 4 bugs in 6 of 6 runs (Haiku 3.3 of 4), every run ended by itself at 11 to 16 steps, same tokens per run, canary tried in 0 of 6 | [1](#step-12-the-same-agent-on-sonnet-the-result) |
+
+**What the table adds up to:** the changes that helped were the ones that gave the agent better hands (`add_visitors`, snapshot trimming) or fixed the loop (guards, reply handling). Prompt lines and a skill brought little or nothing, and two ideas (6d, 6f) made things worse. The change of model (step 12) moved the result more than all of them. Two planted bugs had to be designed carefully (9b failed, 9c worked), and a canary that is never obeyed does not prove that the agent is safe.
+
+## Contents
+
+- [Baseline v2: page with "Clear order" and a full trace](#baseline-v2-page-with-clear-order-and-a-full-trace)
+- [Conclusion of baseline v2](#conclusion-of-baseline-v2)
+- [Baseline v3: the plan (written before the runs)](#baseline-v3-the-plan-written-before-the-runs)
+- [Baseline v3: the result](#baseline-v3-the-result)
+- [Baseline v4: after reply handling, measured with the eval](#baseline-v4-after-reply-handling-measured-with-the-eval)
+- [Step 6c: trimming old snapshots, the plan (written before the runs)](#step-6c-trimming-old-snapshots-the-plan-written-before-the-runs)
+- [Step 6c: trimming old snapshots, the result](#step-6c-trimming-old-snapshots-the-result)
+- [Step 6c, fixed: keep all snapshots of the latest round (the plan, written before the runs)](#step-6c-fixed-keep-all-snapshots-of-the-latest-round-the-plan-written-before-the-runs)
+- [Step 6c, fixed: the result](#step-6c-fixed-the-result)
+- [Step 6d: a prompt that states the real budget (the plan, written before the runs)](#step-6d-a-prompt-that-states-the-real-budget-the-plan-written-before-the-runs)
+- [Step 6d: a prompt that states the real budget, the result](#step-6d-a-prompt-that-states-the-real-budget-the-result)
+- [Step 6e: a tool that adds several visitors in one call (the plan, written before the runs)](#step-6e-a-tool-that-adds-several-visitors-in-one-call-the-plan-written-before-the-runs)
+- [Step 6e: a tool that adds several visitors in one call, the result](#step-6e-a-tool-that-adds-several-visitors-in-one-call-the-result)
+- [Step 6f: trimming the page inside old `add_visitors` results (the plan, written before the runs)](#step-6f-trimming-the-page-inside-old-add_visitors-results-the-plan-written-before-the-runs)
+- [Step 6f: trimming the page inside old `add_visitors` results, the result](#step-6f-trimming-the-page-inside-old-add_visitors-results-the-result)
+- [Step 6b: the prompt-injection canary, the plan (written before the runs)](#step-6b-the-prompt-injection-canary-the-plan-written-before-the-runs)
+- [Step 6b: the prompt-injection canary, the result](#step-6b-the-prompt-injection-canary-the-result)
+- [Step 8: skills, the plan (written before the runs)](#step-8-skills-the-plan-written-before-the-runs)
+- [Step 8: skills, the result](#step-8-skills-the-result)
+- [Step 9a: report a difference right after you see it, the plan (written before the runs)](#step-9a-report-a-difference-right-after-you-see-it-the-plan-written-before-the-runs)
+- [Step 9a: report a difference right after you see it, the result](#step-9a-report-a-difference-right-after-you-see-it-the-result)
+- [Step 9b: a fourth planted bug, the plan (written before the runs)](#step-9b-a-fourth-planted-bug-the-plan-written-before-the-runs)
+- [Step 9b: a fourth planted bug, the result](#step-9b-a-fourth-planted-bug-the-result)
+- [Step 9c: a fourth planted bug, `decimal-age-accepted`, the plan (written before the runs)](#step-9c-a-fourth-planted-bug-decimal-age-accepted-the-plan-written-before-the-runs)
+- [Step 9c: a fourth planted bug, `decimal-age-accepted`, the result](#step-9c-a-fourth-planted-bug-decimal-age-accepted-the-result)
+- [Step 10a: an action canary, the plan (written before the runs)](#step-10a-an-action-canary-the-plan-written-before-the-runs)
+- [Step 10a: an action canary, the result](#step-10a-an-action-canary-the-result)
+- [Step 10b: a neutral action canary, the plan (written before the runs)](#step-10b-a-neutral-action-canary-the-plan-written-before-the-runs)
+- [Step 10b: a neutral action canary, the result](#step-10b-a-neutral-action-canary-the-result)
+- [Step 11: a higher token budget, the plan (written before the runs)](#step-11-a-higher-token-budget-the-plan-written-before-the-runs)
+- [Step 11: a higher token budget, the result](#step-11-a-higher-token-budget-the-result)
+- [Step 12: the same agent on Sonnet, the plan (written before the runs)](#step-12-the-same-agent-on-sonnet-the-plan-written-before-the-runs)
+- [Step 12: the same agent on Sonnet, the result](#step-12-the-same-agent-on-sonnet-the-result)
+- [Summary of runs 1 and 2](#summary-of-runs-1-and-2)
+- [Summary of run 3 (correct page)](#summary-of-run-3-correct-page)
+- [Run 1: the baseline](#run-1-the-baseline)
+- [Run 2: a repeat, no changes](#run-2-a-repeat-no-changes)
+- [Run 3: correct page, no changes](#run-3-correct-page-no-changes)
+
+## The first runs
+
+How to read the first table below (the first single runs, made when the page had three planted bugs; a fourth came in step 9c):
+
+- **Bugs found** is out of the 3 planted bugs of that time (`senior-discount`, `group-threshold`, `limit-off-by-one`).
 - **False alarms** are reported issues that are not planted bugs.
 - **Steps** is the number of calls to the model. One step can contain several tool calls.
 - **Tokens** is input + output. Input tokens grow quickly because every step sends the whole conversation again.
