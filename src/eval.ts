@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { DEFAULT_LIMITS } from './agent';
 import { flag, parseBugs, parseInject, parseRuns } from './cli-args';
 import { runOnce } from './run-once';
-import { summarize, toRunStats, type RunStats } from './score';
+import { summarize, toRunStats, type FailedRun, type RunStats } from './score';
 import { tracePageLinks } from './trace-page';
 
 const bugs = parseBugs(flag('bugs'));
@@ -43,22 +43,30 @@ console.log(`${runCount} run(s), bugs: [${bugs.join(', ') || 'none'}], canary se
 console.log(`Costs real money: at most ${(runCount * DEFAULT_LIMITS.tokenBudget).toLocaleString('en-US')} tokens (and a little more, the last reply can cross the limit).\n`);
 
 const stats: RunStats[] = [];
-try {
-  for (let i = 1; i <= runCount; i++) {
-    const runDir = join(dir, `run-${i}`);
-    console.log(`Run ${i} of ${runCount} ...`);
+const failed: FailedRun[] = [];
+for (let i = 1; i <= runCount; i++) {
+  const runDir = join(dir, `run-${i}`);
+  console.log(`Run ${i} of ${runCount} ...`);
+  try {
     const result = await runOnce({ bugs, inject, model, dir: runDir }); // no step-by-step printing here: the table is the output
-    stats.push(toRunStats(result, bugs, readFileSync(join(runDir, 'trace.jsonl'), 'utf8')));
+    stats.push({ ...toRunStats(result, bugs, readFileSync(join(runDir, 'trace.jsonl'), 'utf8')), run: i });
+  } catch (e) {
+    // One failed run (for example a short outage of the API) must not stop the others, and the summary must say it happened.
+    const error = e instanceof Error ? e.message : String(e);
+    console.error(`Run ${i} failed: ${error}`);
+    failed.push({ run: i, error });
+    process.exitCode = 1;
+    // A wrong or missing key fails every run the same way: stop instead of trying again and again.
+    if (/authentication|x-api-key|401/i.test(error)) {
+      console.error('This looks like a problem with ANTHROPIC_API_KEY, so the other runs are not started.');
+      break;
+    }
   }
-} catch (e) {
-  // One failed run (for example a wrong key) must not throw away the runs that finished.
-  console.error(`\nA run failed: ${e instanceof Error ? e.message : String(e)}`);
-  process.exitCode = 1;
 }
 
 if (stats.length > 0) {
   const links = tracePageLinks(dir); // step 15: every run wrote a page; the summary links to them
-  const summary = summarize(stats, bugs, inject) + (links ? `\n\n${links}` : '');
+  const summary = summarize(stats, bugs, inject, failed) + (links ? `\n\n${links}` : '');
   writeFileSync(join(dir, 'summary.md'), summary + '\n');
   console.log(`\n${summary}\n\nSaved in ${dir}/`);
 }

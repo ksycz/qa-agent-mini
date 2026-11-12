@@ -112,6 +112,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
+- [x] **Fixes after a review of the repo.** The allowed-hosts rule now also holds in the browser itself (a click on a link to another site is blocked, not only `open_page`), a real run allows only the port of the demo page, and the eval goes on after a failed run and lists it in the summary.
 - [x] **Step 15: the trace page appears by itself.** Every run (`npm run agent` and each run of `npm run eval`) writes its `trace.html` when it ends, also after a failed run, and prints a link; `summary.md` of an eval links to the page of every run. `npm run trace` stays for older traces.
 - [x] **Step 14: a page that shows one trace.** `npm run trace -- <trace.jsonl>` writes a web page next to the trace: the setup, every step with what the model said, the tool calls and their results (errors in red, long snapshots folded, reported issues highlighted), and the stop. No new dependency. Everything from the trace is escaped before it goes into the page, and the page forbids scripts.
 - [x] **Step 13: wrap-up.** An overview table of all steps at the top of `RESULTS.md`, "Results in short" and lesson 9 in this README. The open ideas of the old "Step 9: make it better" item moved to "Ideas for later (not planned)", and nothing more is planned.
@@ -129,7 +130,7 @@ The short version of what the steps taught us. Each one has a section below and 
 5. **Not every addition gains something, and that is a result** (steps 8 and 9a). The skill was loaded in 6 of 6 runs and changed nothing; it only cost 11% more tokens.
 6. **Seen is not noticed** (step 9a). When the group bug was reported late, the model had not waited: the wrong total was in the page earlier, but the model did not read it until later. A prompt line about reporting cannot fix that.
 7. **A planted bug must be independent of the others** (step 9b). Our fourth bug was switched on by "Clear order", and the agent clicks that button at the start of almost every test to get a clean order. From then on every price on the page was a mix of two bugs, so the agent found the other bugs less often and the score gave points for the wrong reasons. Test: ask "does the agent do something all the time that switches this bug on?". If yes, it is not a good bug.
-8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits.
+8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits. And a rule in code protects only the paths it is on: until the review the host check was only in `open_page`, so a click on a link could have left the allowed hosts (see "Fixes after a review").
 9. **The model can matter more than the prompt and the tools** (step 12). After seven steps of changes to the prompt, the tools and the limits that moved Haiku by about a bug or less, the same agent on Sonnet found all four bugs in 6 of 6 runs and stopped when it was finished. It is one comparison with 6 runs per model, so it is a direction and not a number. It also means that the eval can no longer tell apart two versions that find 4 of 4: more changes would need harder bugs.
 
 ## Ideas for later (not planned)
@@ -317,7 +318,7 @@ npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a
 - `src/score.ts`: scoring. A bug counts as **found** when the agent reported it with `report_issue`. We read only the title of the report, with one simple keyword rule per bug (`BUG_MATCHERS`).
   A report that fits no switched-on bug is a **false alarm**. The same file counts replies cut off by the length limit and stuck-guard warnings in the trace.
 - `src/eval.ts`: the loop over the runs. It prints a table and saves it in `evals/<time>/summary.md`, with the trace of every run next to it (`run-1/`, `run-2/`, ...). The folder is ignored by git.
-- The summary prints the title of every reported issue with the bug the keywords gave it. Keywords are crude (an LLM judge is on the roadmap, step 9), so look at the titles when a number surprises you.
+- The summary prints the title of every reported issue with the bug the keywords gave it. Keywords are crude (an LLM judge is in "Ideas for later"), so look at the titles when a number surprises you.
 - Cost: every run can use up to 120,000 tokens. The default is 3 runs and the maximum 10 is in the code (`MAX_EVAL_RUNS`). Before it starts, the eval prints the most it can use.
 - Keep the files in Git small: `evals/` is ignored. Only the summaries and traces that `RESULTS.md` cites go to `results/`, after a check for secrets.
 - If you change a planted bug or `SPEC.md`, change `BUG_MATCHERS` too (the test checks that every bug has a rule).
@@ -334,7 +335,7 @@ The model only needs the page as it is now, and the snapshots of its latest roun
   A round is the results of one reply of the model. The first version kept only the single newest snapshot, which hid the earlier snapshots of the same reply from the model (found in the traces of the first eval, see `RESULTS.md`).
 - `src/agent.ts`: sends the trimmed copy to the model in every step. Nothing else in the loop changed.
 - Where the tokens go (runs 11 and 13): about 29% is the fixed part sent again in every step (system prompt, specification, tool list), the rest grows with the conversation, and about half of that is the model's own replies (batches of 10 to 12 tool calls).
-  Old snapshots are the part this step removes. The fixed part is what prompt caching would address (step 9).
+  Old snapshots are the part this step removes. The fixed part is what prompt caching would address (see "Ideas for later").
 - This is a change of behavior, so it is measured: `npm run eval` with and without bugs, compared with baseline v4. Guesses written before the runs are in `RESULTS.md`.
 
 ## Step 6d: a prompt that states the budget (tried, not kept)
@@ -480,6 +481,21 @@ In step 14 you had to run `npm run trace` for every trace. Now the page is part 
 npm run typecheck && npm test      # new tests in test/trace-page.test.ts
 E2E=1 npm test
 npm run agent                      # costs real money: you run it; it prints the link to the page at the end
+```
+
+## Fixes after a review of the repo
+
+A review of the whole repo after step 15 found no broken behaviour in the runs we made, but three things worth fixing:
+
+- **The allowed-hosts rule was only in the `open_page` tool.** A click on a link, a form, a redirect, or an image or script that the page loads would not go through that tool, so the browser could have reached any site. Our demo page has no links, so it never happened, but the README said that "the real protection is in code". Now the rule lives in `src/hosts.ts` and is used twice: by `open_page` (so the model gets a clear message) and by the browser itself (`page.route` in `src/browser.ts` cancels every request to a forbidden host). `launchBrowser` needs the list, so no caller can forget it. An E2E test clicks a link to another port and checks that the page never arrives (and that the test fails when the block is switched off).
+- **"127.0.0.1" meant any port on this computer**, so the agent could have opened another local service. A real run (`runOnce`, `npm run hands`, `npm run loop`) now allows only the host and the port of the demo page (an entry such as `127.0.0.1:4173`). Only `http` and `https` addresses are allowed.
+- **The eval stopped at the first failed run**, and the summary did not say that a run had failed. Now the other runs go on, the table keeps the real run numbers, and the summary lists the failed runs with their error. With a wrong API key it stops at once, because every run would fail the same way.
+
+The canary scoring is unchanged: a refused `open_page` still writes "is not allowed" to the trace. A request blocked by the browser itself (for example after a click) is not counted by the eval yet.
+
+```bash
+npm run typecheck && npm test      # new tests in test/tools.test.ts and test/score.test.ts
+E2E=1 npm test                     # also clicks a link to a forbidden host in a real browser
 ```
 
 ## Step 7: CI

@@ -30,15 +30,16 @@ export async function runOnce(opts: {
 
   const skills = folderSkillStore(); // the guides in the skills/ folder (step 8)
   const target = await startTarget({ bugs, inject });
-  const browser = await launchBrowser();
+  // Only the demo page may be reached: its host AND its port, so no other service on this computer (step 2, tightened after the review).
+  const allowedHosts = [new URL(target.url).host];
+  const browser = await launchBrowser(allowedHosts);
 
   try {
     log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   canary sentence on the page: ${inject || 'no'}   model: ${model}\n`);
 
     const result = await runAgent({
       llm: createAnthropicClient(model),
-      // Only the demo page may be opened. This is the safety rule from step 2.
-      tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [], skills },
+      tools: { browser, allowedHosts, maxSnapshotChars: 5000, issues: [], skills },
       system: buildSystemPrompt(skills.list()), // the menu of skills is part of the prompt, so the trace shows it
       task: taskFor(target.url, loadSpec()),
       log,

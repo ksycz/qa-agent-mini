@@ -7,12 +7,13 @@
 // This file has five parts:
 //   1. TOOL_DEFS:      the menu we show to the model (names, descriptions, arguments).
 //   2. ToolContext:    what the tools need to work (the browser, the allowed hosts, ...).
-//   3. assertAllowed:  the allowed-hosts guard.
+//   3. assertAllowed:  the allowed-hosts guard (the rule itself is in src/hosts.ts).
 //   4. addVisitors:    the one tool that does several browser actions in a row (step 6e).
 //   5. runTool:        the code that actually runs a tool.
 
 import type { BrowserPort } from './browser';
 import type { SkillStore } from './skills';
+import { assertAllowed } from './hosts';
 
 // A tool as the model will see it: a name, a description and the shape of its arguments (JSON schema).
 // The description is part of the prompt: the model decides what to call by reading it.
@@ -96,27 +97,16 @@ export const TOOL_DEFS: ToolDef[] = [
 // so tests can pass in a fake browser.
 export type ToolContext = {
   browser: BrowserPort; // the real or the fake browser
-  allowedHosts: string[]; // the only web hosts the agent may open, for example ['127.0.0.1']
+  allowedHosts: string[]; // the only web hosts the agent may open, for example ['127.0.0.1:4173'] (see src/hosts.ts)
   maxSnapshotChars: number; // snapshots longer than this are cut (saves tokens)
   issues: Issue[]; // the list where report_issue stores what the agent found
   skills: SkillStore; // the guides the agent can load with load_skill (step 8)
 };
 
-// 3. THE GUARD. The agent may open only hosts on the allow list.
-// This is enforced in CODE. A sentence in the prompt such as "do not visit other sites" is only a request;
-// the model can be tricked into ignoring it. This check cannot be tricked.
-export function assertAllowed(url: string, allowedHosts: string[]): void {
-  let host: string;
-  try {
-    host = new URL(url).hostname; // "http://127.0.0.1:4173/x" -> "127.0.0.1"
-  } catch {
-    throw new Error(`Invalid URL: ${url}`);
-  }
-  // We compare the WHOLE host name, so "127.0.0.1.evil.example" is NOT accepted.
-  if (!allowedHosts.includes(host)) {
-    throw new Error(`Host "${host}" is not allowed. Allowed: ${allowedHosts.join(', ')}`);
-  }
-}
+// 3. THE GUARD lives in src/hosts.ts, because the browser uses the same rule (see there). It is imported and passed on here,
+// so `assertAllowed` can still be imported from this file. A sentence in the prompt such as "do not visit other sites" is only a
+// request the model can be tricked into ignoring; this check is code.
+export { assertAllowed };
 
 // Arguments that are required but may be an empty string on purpose.
 // Typing "" into a field is how a tester clears it. Everything else required must contain text.
