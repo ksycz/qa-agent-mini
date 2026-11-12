@@ -2,6 +2,7 @@
 
 A log of every real run of the agent: what was changed, what happened, and what we learned.
 Raw terminal output of each run is saved in `results/`. The full traces (`runs/`) stay on the local machine.
+Every run here was made by the author on her own computer, with her own Anthropic API key; the analysis was written with Claude from the traces she sent. See "How the measurements were made" in the README.
 
 ## Overview of all steps
 
