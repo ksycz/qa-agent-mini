@@ -730,7 +730,7 @@ Baselines are step 6e (with bugs and without) and step 6b (with bugs; same agent
 
 **What it says:** the skill is used every time, costs about 11% more tokens per step, and brings no measurable gain on this agent, because the agent already gets the advice elsewhere. The mechanism (menu in the prompt, loading on request) is what we learned, and it works.
 Where a skill could help is a place where the agent now fails or lacks knowledge, not a repetition of what it has. The only weak place left in the numbers is `group-threshold` (2 of 3 in 6e and here), a sample too small to build on.
-Whether to keep the skill as an example of the mechanism or to revert it is for the owner to decide; the cost is small.
+**Decision of the owner:** the skill stays as an example of the mechanism, with this explanation (no measurable gain, about 11% more tokens per step). The next skill (see the pull request after this one) aims at the weak place, `group-threshold`.
 
 ## Summary of runs 1 and 2
 
