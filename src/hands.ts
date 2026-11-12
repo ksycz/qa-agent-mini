@@ -12,13 +12,14 @@
 import { launchBrowser } from './browser';
 import { startTarget } from './serve-target';
 import { runTool, type ToolContext } from './tools';
+import { NO_SKILLS } from './skills';
 
 // Start the demo page with all three bugs switched on, and a real browser.
 const target = await startTarget({ bugs: ['senior-discount', 'group-threshold', 'limit-off-by-one'] });
 const browser = await launchBrowser();
 
 // Everything the tools need. Only these two hosts may be opened.
-const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [] };
+const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS };
 
 // Calls one tool and prints what happened. Success prints the result; failure prints "ERROR: ...".
 // In step 3 the agent loop will do the same, but it will send the text to the model.

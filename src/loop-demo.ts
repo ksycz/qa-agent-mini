@@ -12,6 +12,7 @@ import { runAgent } from './agent';
 import { launchBrowser } from './browser';
 import { say, scriptedLlm, toolCall } from './fake-llm';
 import { startTarget } from './serve-target';
+import { NO_SKILLS } from './skills';
 
 const target = await startTarget({ bugs: ['senior-discount'] });
 const browser = await launchBrowser();
@@ -29,7 +30,7 @@ const llm = scriptedLlm([
 try {
   const result = await runAgent({
     llm,
-    tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [] },
+    tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS },
     system: 'You are a QA tester.', // the fake model ignores it; a real model would read it
     task: 'Test the page.',
     log: console.log,

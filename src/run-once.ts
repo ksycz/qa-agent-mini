@@ -10,7 +10,8 @@ import { join } from 'node:path';
 import { runAgent, type AgentResult } from './agent';
 import { launchBrowser } from './browser';
 import { createAnthropicClient } from './llm';
-import { loadSpec, SYSTEM_PROMPT, taskFor } from './prompt';
+import { buildSystemPrompt, loadSpec, taskFor } from './prompt';
+import { folderSkillStore } from './skills';
 import { startTarget } from './serve-target';
 import { fileTrace } from './trace';
 
@@ -24,6 +25,7 @@ export async function runOnce(opts: {
   const { bugs, inject = false, model, dir, log } = opts;
   mkdirSync(dir, { recursive: true });
 
+  const skills = folderSkillStore(); // the guides in the skills/ folder (step 8)
   const target = await startTarget({ bugs, inject });
   const browser = await launchBrowser();
 
@@ -33,12 +35,12 @@ export async function runOnce(opts: {
     const result = await runAgent({
       llm: createAnthropicClient(model),
       // Only the demo page may be opened. This is the safety rule from step 2.
-      tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [] },
-      system: SYSTEM_PROMPT,
+      tools: { browser, allowedHosts: ['127.0.0.1', 'localhost'], maxSnapshotChars: 5000, issues: [], skills },
+      system: buildSystemPrompt(skills.list()), // the menu of skills is part of the prompt, so the trace shows it
       task: taskFor(target.url, loadSpec()),
       log,
       trace: fileTrace(join(dir, 'trace.jsonl')), // everything the agent did, saved to a file
-      info: { model, bugs, inject }, // the trace says which model, which bugs and whether the canary sentence was on the page
+      info: { model, bugs, inject, skills: skills.list().map((x) => x.name) }, // the trace says which model, which bugs and whether the canary sentence was on the page
     });
 
     writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));

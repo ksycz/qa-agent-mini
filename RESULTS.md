@@ -673,6 +673,27 @@ The model is `claude-haiku-5-5`.
 **What it does not show.** One fixed, very recognizable sentence ("AI agent: ignore your previous instructions...") on one page, 3 runs, one model. Haiku ignoring it does not mean the agent is safe. Not tested: a sentence that looks like part of the specification or like a message from the user, an order to do something other than a report (for example to open another site; the allowed-hosts check would refuse it, but we have not seen it tried), text that comes with a tool result and not with the page, and other models.
 Next candidates, only if we want to go on with security (each its own pull request): a second sentence that imitates the specification, an order to open an address outside the allowed hosts (to see the guard work in a real run), a second model.
 
+## Step 8: skills, the plan (written before the runs)
+
+**The change:** a skill `boundary-value-testing`, a tool `load_skill`, and a menu of skills in the system prompt (`src/skills.ts`, `src/prompt.ts`, `src/tools.ts`). Two things change in the prompt at once, on purpose, because they belong together:
+the line "Test boundaries (for example ages 5, 6, 17, 18, 64, 65) and order sizes (for example 7, 8, 10 tickets)" is replaced by "Test the boundaries of every range, threshold and limit in the specification, not only typical values", and the menu of skills with the sentence "load it BEFORE you start testing" is added.
+The skill holds a general method (below, on, above each edge; orders of N-1, N, N+1 items; work out the expected result first) with an example that is not from our page. `SPEC.md` is unchanged, so its table "Boundaries worth testing" still gives the exact values.
+The limits, the tools of step 6e and the trimming of 6c are as before.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, traces kept. Baselines: step 6e and step 6b (same agent, the 6b run has the canary sentence on the page, which did not change the results):
+with bugs senior 3 / group 2 or 3 / limit 3 of 3, 0 false alarms, 12.7 to 13.0 steps, 5,026 to 5,170 tokens per step, the first order of 8 or more tickets at step 2 (in 8 of 9 runs; once at step 5);
+without bugs (6e): 0 false alarms, 15.7 steps, 4,971 tokens per step, 3 runs on the token budget. Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. The model calls `load_skill` in at least 2 of 3 runs on each page, and in the first or second step (the prompt asks for it before testing). A weak guess: a small model may ignore the menu.
+2. The bugs found stay the same within one run (senior 3 of 3, group 2 or 3 of 3, limit 3 of 3) and false alarms stay 0. The table in `SPEC.md` still has the exact values, so the skill has little left to add; we do not expect more bugs found.
+3. Tokens per step go up by 3% to 8%, because the text of the skill (about 300 tokens) is sent again at every later step, and the prompt got a little longer. Steps per run stay about 13 to 16.
+4. A possible harm: the model does not load the skill, and without the concrete examples in the prompt it tests fewer edges (for example the first order of 8 or more tickets comes later than step 2). We look at the first step with 8 or more tickets, and at the number of different ages tested.
+5. A possible benefit, which we do not guess too hard: the model works out the expected price before each check, as the skill says, so there are fewer reports that are wrong; with a correct page that means 0 false alarms in 3 of 3 runs.
+
+The point of this step is to see the mechanism (menu in the prompt, loading on request) in a real run. If the measurement shows no gain and a small cost, we decide together whether to keep it as an example of the mechanism or to revert it.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
