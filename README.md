@@ -120,6 +120,13 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
+## How the measurements were made
+
+- **Every run with a real model** (`npm run agent`, `npm run eval`) was started by the author on her own computer, with her own Anthropic API key in the environment variable `ANTHROPIC_API_KEY`. The key was never written into a file, never sent to anyone, and is not in this repo (`test/secrets.test.ts` checks that).
+- **The code was written with Claude (Claude Code)**, step by step, from the author's requests and with her approval of every design before it was built. Claude also read the traces she sent after each eval and wrote the analysis in `RESULTS.md`. Claude never had the key and never ran the model; the guesses in `RESULTS.md` were written before each measurement.
+- **CI** (`.github/workflows/ci.yml`) has no key: it runs only the type check and the unit tests, which use a fake model and a fake browser.
+- **What is committed:** only the summaries and the traces that `RESULTS.md` cites, in `results/`, after a check for secrets (API key, local paths, e-mail). The folders `runs/` and `evals/` stay on the author's computer.
+
 ## Lessons so far
 
 The short version of what the steps taught us. Each one has a section below and numbers in [RESULTS.md](RESULTS.md).
