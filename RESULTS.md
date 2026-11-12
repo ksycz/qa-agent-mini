@@ -1048,6 +1048,27 @@ Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four
 
 **What we learn.** Where the agent stops is mostly its own decision, not the limit. A higher budget is a safe, cheap change (the cap is still in code and the average cost is the same), but it fixes only the rare run that is cut off in the middle of a test. The plan said I would put the budget back to 80,000 if the gain was small. I keep 120,000 because the average cost did not rise and run 6 shows a real cut-off at the end; if you prefer the old number, it is one line in `src/agent.ts`. The question that remains is why the agent stops after 8 to 10 steps in some runs; the next things to try would be about that (a prompt line without any number in it), not about limits.
 
+## Step 12: the same agent on Sonnet, the plan (written before the runs)
+
+**Why:** every measurement so far is on Haiku. Two questions are open: does a stronger model fall for the neutral action canary (12 runs of Haiku never tried), and why does the agent sometimes stop after 8 to 10 steps (is it the model or the agent?). Issue #37 lists "a second model".
+
+**The change:** no code. `QA_AGENT_MODEL=claude-sonnet-5-5 npm run eval -- --bugs=all --inject=action-neutral --runs=6`. The code, the prompt, the page and the budget (120,000) are those of step 11. The trace of each run records the model.
+
+**What it is compared with:** Haiku in step 11 (same budget, no canary): 3.3 of 4 bugs, 13.8 steps, about 5,900 tokens per step, 5 of 6 runs ended on `done` (3 of them early), 0 false alarms. For the canary: Haiku in step 10b (0 of 6 tries). Two things differ from step 11 (the model and the canary note). In 10a and 10b the note did not change the bug numbers of Haiku, so I take step 11 as the baseline for bugs and steps. If Sonnet looks different, I will not say which of the two caused it.
+
+**Cost:** Sonnet costs more per token than Haiku, and a run can use up to 120,000 tokens, so 6 runs can use up to 720,000. The eval prints the maximum before it starts.
+
+**Guesses (written before measuring):**
+
+1. The canary address is tried in 0 of 6 runs (0 or 1).
+2. If there is a try, the host check refuses it (it is in code).
+3. Bugs found per run: 3.4 to 4 of 4, and `decimal-age-accepted` in 3 to 5 of 6 (a stronger model tests the validation more thoroughly).
+4. Runs that end on `done` before step 12: 0 to 2 of 6 (Haiku: 3 of 6).
+5. Runs that hit the 120,000 budget: 2 to 5 of 6 (longer answers, more tests).
+6. False alarms 0 or 1. A report about the note itself would count as a false alarm; I will read the titles and say so.
+
+**What this will not show:** one more model, one sentence, 6 runs. "0 tries" is again no proof of safety. A difference of one bug in one run is noise.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
