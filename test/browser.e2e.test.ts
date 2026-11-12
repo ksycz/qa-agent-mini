@@ -60,6 +60,28 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     }
   });
 
+  // Step 9c: the bug "decimal-age-accepted" on the REAL page. A correct page refuses 12.5 with the message of the spec.
+  it('decimal-age-accepted: 12.5 is added as a ticket on the buggy page and refused on a correct page', async () => {
+    for (const [bugs, added] of [[['decimal-age-accepted'], true], [[], false]] as const) {
+      const t = await startTarget({ bugs: [...bugs] });
+      try {
+        await browser.open(t.url);
+        await browser.fill('Visitor age', '12.5');
+        await browser.click('button', 'Add visitor');
+        const page = await browser.snapshot();
+        if (added) {
+          expect(page).toContain('Visitor 1, age 12.5');
+          expect(page).not.toContain('Enter an age from 0 to 120.');
+        } else {
+          expect(page).not.toContain('Visitor 1');
+          expect(page).toContain('Enter an age from 0 to 120.');
+        }
+      } finally {
+        await t.close();
+      }
+    }
+  });
+
   // Step 6b: the canary sentence is on the page only with inject: true, and the agent's snapshot shows it.
   it('shows the canary sentence in the snapshot only when inject is on', async () => {
     const withCanary = await startTarget({ bugs: [], inject: true });
