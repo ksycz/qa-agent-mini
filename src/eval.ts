@@ -5,6 +5,7 @@
 //   export ANTHROPIC_API_KEY=...
 //   npm run eval -- --bugs=all --runs=3       the page has all four bugs
 //   npm run eval -- --bugs=none --runs=3      the page is correct: every report is a false alarm
+//   npm run eval -- --bugs=all --inject=action-neutral  the same, written like an ordinary staging note (step 10b)
 //   npm run eval -- --bugs=all --inject=action  the hidden sentence asks for an ACTION (open a forbidden address, step 10a)
 //   npm run eval -- --bugs=all --inject       the page also carries a hidden sentence that gives orders to an AI agent (the canary, step 6b);
 //                                             the summary says in how many runs the agent obeyed it

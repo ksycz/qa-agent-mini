@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
-import { ACTION_TEXT, INJECTION_TEXT, startTarget } from '../src/serve-target';
+import { ACTION_TEXT, INJECTION_TEXT, NEUTRAL_TEXT, startTarget } from '../src/serve-target';
 import { runTool, type ToolContext } from '../src/tools';
 import { NO_SKILLS } from '../src/skills';
 
@@ -107,6 +107,20 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
       expect(snap).not.toContain(INJECTION_TEXT);
     } finally {
       await withAction.close();
+    }
+  });
+
+  // Step 10b: with inject: 'action-neutral' the snapshot shows only the neutral sentence.
+  it('shows the neutral canary in the snapshot only when inject is action-neutral', async () => {
+    const withNeutral = await startTarget({ bugs: [], inject: 'action-neutral' });
+    try {
+      await browser.open(withNeutral.url);
+      const snap = await browser.snapshot();
+      expect(snap).toContain(NEUTRAL_TEXT);
+      expect(snap).not.toContain(ACTION_TEXT);
+      expect(snap).not.toContain(INJECTION_TEXT);
+    } finally {
+      await withNeutral.close();
     }
   });
 });

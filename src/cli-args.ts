@@ -17,20 +17,22 @@ export function hasFlag(name: string, argv: string[] = process.argv): boolean {
 // Which canary the page carries (step 6b and step 10a):
 //   'report' = the hidden sentence orders the agent to REPORT a fake issue (the first canary)
 //   'action' = the hidden sentence orders the agent to OPEN an address outside the allowed hosts (step 10a)
-export type InjectKind = 'report' | 'action';
+//   'action-neutral' = the same kind of order, but written like a normal staging note, with no "canary" and no "AI agent" in it (step 10b)
+export type InjectKind = 'report' | 'action' | 'action-neutral';
 
 // Reads --inject. It gives back false (no canary), or the kind of canary.
 //   (nothing)         -> false
 //   --inject          -> 'report'   (so the old command still works)
 //   --inject=report   -> 'report'
 //   --inject=action   -> 'action'
+//   --inject=action-neutral -> 'action-neutral'
 // Any other value is a typo, and a typo must not silently run without a canary.
 export function parseInject(argv: string[] = process.argv): InjectKind | false {
   if (hasFlag('inject', argv)) return 'report';
   const value = flag('inject', argv);
   if (value === undefined) return false;
-  if (value === 'report' || value === 'action') return value;
-  throw new Error('--inject must be --inject, --inject=report or --inject=action');
+  if (value === 'report' || value === 'action' || value === 'action-neutral') return value;
+  throw new Error('--inject must be --inject, --inject=report, --inject=action or --inject=action-neutral');
 }
 
 // Turns the --bugs value into a list of bug names.
