@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchBrowser, type BrowserPort } from '../src/browser';
 import { INJECTION_TEXT, startTarget } from '../src/serve-target';
 import { runTool, type ToolContext } from '../src/tools';
+import { NO_SKILLS } from '../src/skills';
 
 // describe.skipIf: run this group only when the environment variable E2E is set.
 describe.skipIf(!process.env.E2E)('browser e2e', () => {
@@ -50,7 +51,7 @@ describe.skipIf(!process.env.E2E)('browser e2e', () => {
     const limitTarget = await startTarget({ bugs: [] }); // a page without bugs: the 11th ticket is refused
     try {
       await browser.open(limitTarget.url);
-      const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 6000, issues: [] };
+      const ctx: ToolContext = { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 6000, issues: [], skills: NO_SKILLS };
       const out = await runTool(ctx, 'add_visitors', { ages: '30,30,30,30,30,30,30,30,30,30,30' });
       expect(out).toContain('Stopped after age 30 (11 of 11)');
       expect(out).toContain('Maximum 10 tickets per order.');

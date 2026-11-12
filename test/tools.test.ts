@@ -6,7 +6,17 @@
 
 import { describe, expect, it } from 'vitest';
 import type { BrowserPort } from '../src/browser';
+import type { SkillStore } from '../src/skills';
 import { assertAllowed, MAX_VISITORS_PER_CALL, runTool, TOOL_DEFS, type ToolContext } from '../src/tools';
+
+// A fake store with one skill, so the tests need no files.
+const fakeSkills: SkillStore = {
+  list: () => [{ name: 'demo-skill', description: 'A demo.' }],
+  load: (name) => {
+    if (name !== 'demo-skill') throw new Error(`Unknown skill "${name}". Available skills: demo-skill`);
+    return 'Skill: demo-skill\n\nDo the demo.';
+  },
+};
 
 // Builds a tool context around a fake browser. `overrides` changes single settings for one test.
 // `log` collects what the fake browser was asked to do.
@@ -18,7 +28,7 @@ function ctx(overrides: Partial<ToolContext> = {}, log: string[] = []): ToolCont
     fill: async (l, t) => void log.push(`fill ${l}=${t}`),
     close: async () => {},
   };
-  return { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 20, issues: [], ...overrides };
+  return { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 20, issues: [], skills: fakeSkills, ...overrides };
 }
 
 describe('assertAllowed', () => {
@@ -60,6 +70,11 @@ describe('runTool', () => {
   it('rejects an empty value where text is required, and values that are not text', async () => {
     await expect(runTool(ctx(), 'click', { role: 'button', name: '  ' })).rejects.toThrow(/Empty argument "name"/);
     await expect(runTool(ctx(), 'fill', { label: 'Visitor age', text: 65 })).rejects.toThrow(/text/); // a number is not text
+  });
+  it('load_skill returns the text of a skill, and refuses an unknown name with the list of skills', async () => {
+    await expect(runTool(ctx(), 'load_skill', { name: 'demo-skill' })).resolves.toBe('Skill: demo-skill\n\nDo the demo.');
+    await expect(runTool(ctx(), 'load_skill', { name: 'nope' })).rejects.toThrow(/Available skills: demo-skill/);
+    await expect(runTool(ctx(), 'load_skill', {})).rejects.toThrow(/Missing argument "name"/);
   });
   it('rejects unknown tools', async () => {
     await expect(runTool(ctx(), 'delete_everything', {})).rejects.toThrow(/Unknown tool/);

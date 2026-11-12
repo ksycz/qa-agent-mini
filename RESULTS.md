@@ -673,6 +673,65 @@ The model is `claude-haiku-5-5`.
 **What it does not show.** One fixed, very recognizable sentence ("AI agent: ignore your previous instructions...") on one page, 3 runs, one model. Haiku ignoring it does not mean the agent is safe. Not tested: a sentence that looks like part of the specification or like a message from the user, an order to do something other than a report (for example to open another site; the allowed-hosts check would refuse it, but we have not seen it tried), text that comes with a tool result and not with the page, and other models.
 Next candidates, only if we want to go on with security (each its own pull request): the same canary against a prompt without the injection rule, to see what the rule adds; a second sentence that imitates the specification, an order to open an address outside the allowed hosts (to see the guard work in a real run), a second model.
 
+## Step 8: skills, the plan (written before the runs)
+
+**The change:** a skill `boundary-value-testing`, a tool `load_skill`, and a menu of skills in the system prompt (`src/skills.ts`, `src/prompt.ts`, `src/tools.ts`). Two things change in the prompt at once, on purpose, because they belong together:
+the line "Test boundaries (for example ages 5, 6, 17, 18, 64, 65) and order sizes (for example 7, 8, 10 tickets)" is replaced by "Test the boundaries of every range, threshold and limit in the specification, not only typical values", and the menu of skills with the sentence "load it BEFORE you start testing" is added.
+The skill holds a general method (below, on, above each edge; orders of N-1, N, N+1 items; work out the expected result first) with an example that is not from our page. `SPEC.md` is unchanged, so its table "Boundaries worth testing" still gives the exact values.
+The limits, the tools of step 6e and the trimming of 6c are as before.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=3` and `--bugs=none --runs=3`, traces kept. Baselines: step 6e and step 6b (same agent, the 6b run has the canary sentence on the page, which did not change the results):
+with bugs senior 3 / group 2 or 3 / limit 3 of 3, 0 false alarms, 12.7 to 13.0 steps, 5,026 to 5,170 tokens per step, the first order of 8 or more tickets at step 2 (in 8 of 9 runs; once at step 5);
+without bugs (6e): 0 false alarms, 15.7 steps, 4,971 tokens per step, 3 runs on the token budget. Three runs per page is a small sample.
+
+**Guesses (written before measuring):**
+
+1. The model calls `load_skill` in at least 2 of 3 runs on each page, and in the first or second step (the prompt asks for it before testing). A weak guess: a small model may ignore the menu.
+2. The bugs found stay the same within one run (senior 3 of 3, group 2 or 3 of 3, limit 3 of 3) and false alarms stay 0. The table in `SPEC.md` still has the exact values, so the skill has little left to add; we do not expect more bugs found.
+3. Tokens per step go up by 3% to 8%, because the text of the skill (about 300 tokens) is sent again at every later step, and the prompt got a little longer. Steps per run stay about 13 to 16.
+4. A possible harm: the model does not load the skill, and without the concrete examples in the prompt it tests fewer edges (for example the first order of 8 or more tickets comes later than step 2). We look at the first step with 8 or more tickets, and at the number of different ages tested.
+5. A possible benefit, which we do not guess too hard: the model works out the expected price before each check, as the skill says, so there are fewer reports that are wrong; with a correct page that means 0 false alarms in 3 of 3 runs.
+
+The point of this step is to see the mechanism (menu in the prompt, loading on request) in a real run. If the measurement shows no gain and a small cost, we decide together whether to keep it as an example of the mechanism or to revert it.
+
+## Step 8: skills, the result
+
+Measured with the eval, 3 runs per page: `results/eval-skills-all-summary.md` and `results/eval-skills-none-summary.md`, traces in `results/eval-traces/skills-all` and `skills-none`. In the first line of every trace `run.skills` is `['boundary-value-testing']` and the system prompt ends with the menu.
+Baselines are step 6e (with bugs and without) and step 6b (with bugs; same agent, canary on the page, which changed nothing). The model is `claude-haiku-5-5`.
+
+| | 6e | 6b | 8 skills |
+|---|---|---|---|
+| All bugs: `senior-discount` / `group-threshold` / `limit-off-by-one` | 3 / 2 / 3 of 3 | 3 / 3 / 3 of 3 | 3 / 2 / 3 of 3 |
+| False alarms (with and without bugs) | 0 | 0 | 0 |
+| All bugs: steps, tokens per run (mean) | 13.0, 67,207 | 12.7, 63,661 | 14.0, 80,506 |
+| All bugs: tokens per step | 5,170 | 5,026 | 5,750 |
+| No bugs: steps, tokens per run (mean) | 15.7, 77,875 | n/a | 15.0, 82,498 |
+| No bugs: tokens per step | 4,971 | n/a | 5,500 |
+| Ended on the token budget / on `done`, all bugs / no bugs | 1 / 2, 2 / 1 | 1 / 2, n/a | 1 / 2, 3 / 0 |
+| `load_skill` called, at which step | n/a | n/a | 6 of 6 runs, always step 1 |
+| First call of `add_visitors` with 8 or more ages at step 2 | 8 of 9 runs (6e and 6b) | | 5 of 6 runs (once at step 9) |
+| Largest order built, all bugs / no bugs | 11 / 10 | 11 | 11 / 10 |
+
+**The guesses from the plan, one by one**
+
+1. *The model calls `load_skill` in at least 2 of 3 runs on each page, in the first or second step:* **true, more than guessed.** 6 of 6 runs, always as the very first call, before `open_page`. The sentence "load it BEFORE you start testing" in the prompt was followed to the letter.
+2. *The bugs found stay the same within one run, false alarms 0:* **true.** Senior 3, group 2, limit 3 of 3, as in 6e; false alarms 0 in all 6 runs.
+3. *Tokens per step up by 3% to 8%, steps about 13 to 16:* **tokens per step were higher than guessed, steps true.** With bugs 5,750 against 5,170 (11% more), without bugs 5,500 against 4,971 (11% more); 14.0 and 15.0 steps.
+   The skill text is 1,157 characters (about 300 tokens) in the history of every later step, which is about 6% of a step of 5,000 tokens, and the menu in the prompt adds a little more. That explains most of it; the rest is probably the usual difference between runs. Per run that was 80,506 tokens against 67,207, and all three runs without bugs ended on the token budget (before 2 of 3).
+4. *A possible harm: the skill is not loaded, and the first big order comes later:* **did not happen.** The skill was loaded every time. The first call with 8 or more ages was at step 2 in 5 of 6 runs, as before. In one run with bugs the first list had 7 ages (the skill says "N-1, N, N+1"); the order of 8 came at step 9, and that run did not report the group bug before it ended on the token budget at step 15.
+   It may be the effect of the skill or chance; one run cannot tell.
+5. *A possible benefit: fewer wrong reports, 0 false alarms without bugs in 3 of 3 runs:* **true, but not a gain.** 0 false alarms in 3 of 3 runs, as before.
+
+**What the traces show**
+
+- The mechanism works with Haiku: it reads the menu and loads the skill when the prompt asks for it before testing. We did not test what happens if the prompt only says "load a skill if it fits"; with the word BEFORE the model did it at once, even before opening the page.
+- The skill had no visible effect on the testing. The model hardly refers to it (only "Let me start with a batch of boundary ages" in 2 of 6 runs), and it did the same boundary testing before the skill existed. The reason is clear: the prompt (a general line) and the table "Boundaries worth testing" in the specification already give the same advice, so the skill had nothing new to add. We said so in the plan.
+- One of the three reports of group in run 1 names a narrower cause ("free ticket not counted toward the 8-ticket group discount"). The steps in the report are an order of 8 tickets with a free one that got no 10%, which is the planted bug; the keyword rule counts it as found.
+
+**What it says:** the skill is used every time, costs about 11% more tokens per step, and brings no measurable gain on this agent, because the agent already gets the advice elsewhere. The mechanism (menu in the prompt, loading on request) is what we learned, and it works.
+Where a skill could help is a place where the agent now fails or lacks knowledge, not a repetition of what it has. The only weak place left in the numbers is `group-threshold` (2 of 3 in 6e and here), a sample too small to build on.
+**Decision of the owner:** the skill stays as an example of the mechanism, with this explanation (no measurable gain, about 11% more tokens per step). The next skill (see the pull request after this one) aims at the weak place, `group-threshold`.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

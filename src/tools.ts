@@ -12,6 +12,7 @@
 //   5. runTool:        the code that actually runs a tool.
 
 import type { BrowserPort } from './browser';
+import type { SkillStore } from './skills';
 
 // A tool as the model will see it: a name, a description and the shape of its arguments (JSON schema).
 // The description is part of the prompt: the model decides what to call by reading it.
@@ -20,7 +21,7 @@ export type ToolDef = { name: string; description: string; input_schema: Record<
 // A problem the agent found. This is the agent's OUTPUT, the thing we later score.
 export type Issue = { title: string; steps: string; expected: string; actual: string };
 
-// 1. THE MENU. Six tools. Keep descriptions short and concrete.
+// 1. THE MENU. Seven tools. Keep descriptions short and concrete.
 export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'open_page',
@@ -64,6 +65,17 @@ export const TOOL_DEFS: ToolDef[] = [
     },
   },
   {
+    name: 'load_skill',
+    description:
+      'Load the full text of a skill (a short guide for one kind of testing work). The skill names are listed in the system prompt. ' +
+      'Load a skill when its description fits what you are about to do.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'The name of the skill, for example "boundary-value-testing"' } },
+      required: ['name'],
+    },
+  },
+  {
     name: 'report_issue',
     description:
       'Report one problem you observed. Report only differences between the specification and what you saw on the page.',
@@ -87,6 +99,7 @@ export type ToolContext = {
   allowedHosts: string[]; // the only web hosts the agent may open, for example ['127.0.0.1']
   maxSnapshotChars: number; // snapshots longer than this are cut (saves tokens)
   issues: Issue[]; // the list where report_issue stores what the agent found
+  skills: SkillStore; // the guides the agent can load with load_skill (step 8)
 };
 
 // 3. THE GUARD. The agent may open only hosts on the allow list.
@@ -203,6 +216,8 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
       return 'Filled.';
     case 'add_visitors':
       return addVisitors(ctx, str('ages'));
+    case 'load_skill':
+      return ctx.skills.load(str('name')); // throws a readable error for an unknown name
     case 'report_issue': {
       // All four fields are required, so a report always has steps, expected and actual results.
       ctx.issues.push({

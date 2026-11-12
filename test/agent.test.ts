@@ -10,6 +10,7 @@ import type { BrowserPort } from '../src/browser';
 import { say, scriptedLlm, toolCall, toolCalls } from '../src/fake-llm';
 import type { LlmClient, LlmResponse } from '../src/llm';
 import { memoryTrace } from '../src/trace';
+import { NO_SKILLS } from '../src/skills';
 
 // A fake browser that only writes down what it was asked to do.
 function fakeBrowser(log: string[] = []): BrowserPort {
@@ -31,7 +32,7 @@ function cutOffReply(calls: [string, Record<string, unknown>][]): LlmResponse {
 function run(llm: LlmClient, limits: Partial<AgentLimits> = {}, log: string[] = []) {
   return runAgent({
     llm,
-    tools: { browser: fakeBrowser(log), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+    tools: { browser: fakeBrowser(log), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
     system: 'system',
     task: 'task',
     limits,
@@ -143,7 +144,7 @@ describe('agent loop', () => {
     const click: [string, Record<string, unknown>] = ['click', { role: 'button', name: 'Add visitor' }];
     const r = await runAgent({
       llm: scriptedLlm([toolCalls([click, click, click, click]), say('end')]),
-      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
       system: 'system',
       task: 'task',
     });
@@ -163,7 +164,7 @@ describe('agent loop', () => {
     const trace = memoryTrace();
     await runAgent({
       llm: scriptedLlm([toolCall('open_page', { url: 'https://evil.example/' }), toolCall('snapshot', {}), say('end')]),
-      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
       system: 'system',
       task: 'task',
       trace,
@@ -178,7 +179,7 @@ describe('agent loop', () => {
     const trace = memoryTrace();
     await runAgent({
       llm: scriptedLlm([toolCall('snapshot', {}), say('end')]),
-      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
       system: 'system',
       task: 'task',
       trace,
@@ -194,7 +195,7 @@ describe('agent loop', () => {
     const lines: string[] = [];
     const r = await runAgent({
       llm: scriptedLlm([cutOffReply([]), say('finished')]),
-      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [] },
+      tools: { browser: fakeBrowser(), allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS },
       system: 'system',
       task: 'task',
       log: (l) => lines.push(l),
@@ -272,7 +273,7 @@ describe('agent loop', () => {
     const browser = { ...fakeBrowser(), snapshot: async () => longPage };
     await runAgent({
       llm: scriptedLlm([toolCall('snapshot', {}), say('end')]),
-      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 5000, issues: [] },
+      tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS },
       system: 'system',
       task: 'task',
       trace,
