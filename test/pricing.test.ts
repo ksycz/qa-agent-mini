@@ -33,6 +33,13 @@ describe('order', () => {
     // 6 adults + 2 small children = 8 tickets, so the 10% discount applies to the 6 paid tickets.
     expect(priceOrder([30, 30, 30, 30, 30, 30, 3, 3], []).totalCents).toBe(Math.round(6 * 2000 * 0.9));
   });
+  // "carried" = tickets of cleared orders. The page passes 0 unless the bug "clear-keeps-count" is on.
+  it('a new order after Clear starts from zero: one adult pays €20.00', () => {
+    expect(priceOrder([30], [], 0).totalCents).toBe(2000);
+  });
+  it('bug clear-keeps-count: 8 cleared tickets still count, so one adult gets the group discount', () => {
+    expect(priceOrder([30], ['clear-keeps-count'], 8).totalCents).toBe(1800);
+  });
   it('max is 10, bug makes it 11', () => {
     expect(maxTickets([])).toBe(10);
     expect(maxTickets(['limit-off-by-one'])).toBe(11);

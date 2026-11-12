@@ -26,13 +26,25 @@ describe('scoring', () => {
     );
     expect(s.issues.map((i) => i.bug)).toEqual(['senior-discount', 'group-threshold', 'senior-discount', 'senior-discount']);
     expect(s.found).toEqual(['senior-discount', 'group-threshold']);
-    expect(s.missed).toEqual(['limit-off-by-one']);
+    expect(s.missed).toEqual(['limit-off-by-one', 'clear-keeps-count']);
     expect(s.falseAlarms).toBe(0);
   });
 
   it('finds the limit bug (invented title) and does not take it for the group bug', () => {
     const s = scoreIssues(['An 11th ticket is accepted although the limit is 10'], ALL);
     expect(s.found).toEqual(['limit-off-by-one']);
+  });
+
+  it('takes a report about Clear order for the clear bug, even if it also says "group discount" (the rule order)', () => {
+    const s = scoreIssues(
+      [
+        'Group discount still applied after Clear order (invented title)',
+        'Ticket after clearing the order costs €18.00 instead of €20.00 (invented title)',
+        'Group discount not applied at 8 tickets', // must stay the group bug
+      ],
+      ALL,
+    );
+    expect(s.issues.map((i) => i.bug)).toEqual(['clear-keeps-count', 'clear-keeps-count', 'group-threshold']);
   });
 
   it('counts a report that fits no bug as a false alarm', () => {
@@ -79,10 +91,11 @@ describe('summary', () => {
       ],
       ALL,
     );
-    expect(text).toContain('| 1 | 10 | 10,000 | done | 2 of 3 | 0 | 1 | 0 |');
+    expect(text).toContain('| 1 | 10 | 10,000 | done | 2 of 4 | 0 | 1 | 0 |');
     expect(text).toContain('`senior-discount`: reported in 2 of 2 runs');
     expect(text).toContain('`group-threshold`: reported in 1 of 2 runs');
     expect(text).toContain('`limit-off-by-one`: reported in 0 of 2 runs');
+    expect(text).toContain('`clear-keeps-count`: reported in 0 of 2 runs');
     expect(text).toContain('False alarms: 1 in 2 runs');
     expect(text).toContain('Tokens per run: mean 15,000, min 10,000, max 20,000');
     expect(text).toContain('Run 2: Odd [FALSE ALARM]'); // the titles are printed, so the person can check the matching

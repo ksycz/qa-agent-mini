@@ -42,6 +42,7 @@ for the product owner, not a bug.
 | Age | 0, 5, 6, 17, 18, 64, 65, 120, 121, -1 |
 | Tickets in the order | 7, 8, 9, 10, 11 |
 | Combination | 8 tickets including free ones, 8 tickets with a senior |
+| After "Clear order" | an order of 8, clear, then one adult |
 
 ## Worked examples
 
@@ -50,3 +51,4 @@ for the product owner, not a bug.
 - Eight adults: 8 × €18.00 = €144.00.
 - One visitor aged 65 in a group of 8 or more: €9.00.
 - One visitor aged 12 in a group of 8 or more: €9.00.
+- An order of 8 adults, then "Clear order", then one adult: €20.00 (the new order is not a group).

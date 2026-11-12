@@ -782,6 +782,22 @@ Without bugs (3 runs): 0 false alarms, 13.3 steps, 74,774 tokens per run (5,608 
 
 **What we can and cannot say.** The line did no harm that we can see: no false alarms, same cost, all bugs found in all runs. We cannot say that it caused the better group result: the baseline is 3 runs, and in those the miss came from a run that built exactly 8 tickets only late. Half of the runs still end on the token budget, and the group bug is still often noticed late. The next lever is probably not the prompt wording but what the model reads in the page after `add_visitors` (a smaller result that points at the total), which is a candidate for step 9. The line stays.
 
+## Step 9b: a fourth planted bug, the plan (written before the runs)
+
+**Why:** after step 9a all three bugs were found in 6 of 6 runs, so the eval cannot show a gain any more (a ceiling). A harder bug makes later changes measurable again.
+
+**The change:** the bug `clear-keeps-count`. "Clear order" empties the list, but the page remembers how many tickets were in it, and the group discount counts them: 8 adults, "Clear order", then one adult shows €18.00 instead of €20.00. It needs a sequence of actions (add, clear, add), not one click. `SPEC.md` already says "after clearing, a new order starts from zero", so it only got a worked example and a boundary row. The score rule for it (`/clear|cleared|reset|new order/`) is the first in `BUG_MATCHERS`, because the reports of this bug also say "group discount". The code, the prompt and the tools are as in step 9a.
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6` (now four bugs). `--bugs=none` is not repeated: the correct page did not change. The comparison with step 9a is not like for like (three bugs there), so this run becomes the new baseline.
+
+**Guesses (written before measuring):**
+
+1. `clear-keeps-count` is found in 3 or 4 of 6 runs.
+2. `senior-discount`, `group-threshold` and `limit-off-by-one` stay at 5 or 6 of 6 each.
+3. False alarms stay 0.
+4. Steps and tokens per step stay about as in step 9a (14.5 steps, 5,774 tokens per step); an extra test could take a step or two.
+5. The keyword rule is right: no report of another bug is counted as `clear-keeps-count` and the other way round. We check this by reading the titles in the summary.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

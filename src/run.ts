@@ -2,7 +2,7 @@
 //
 // Run it with:
 //   export ANTHROPIC_API_KEY=...            (once per terminal window; never put the key in a file)
-//   npm run agent -- --bugs=all             the page has all three bugs
+//   npm run agent -- --bugs=all             the page has all the bugs (four)
 //   npm run agent -- --bugs=none            the page is correct: a good agent reports nothing
 //   npm run agent -- --bugs=all --inject    the page also carries the hidden canary sentence (step 6b)
 //

@@ -105,6 +105,9 @@
 
     const bugs = window.__BUGS__;
     const ages = []; // the ages of the visitors added so far, for example [30, 65]
+    // How many tickets were in the orders cleared before. Only used when the bug "clear-keeps-count" is on;
+    // otherwise it stays 0, so every new order really starts from zero.
+    let cleared = 0;
 
     // Find the elements on the page once, so we can use them below.
     const input = document.getElementById('age');
@@ -114,7 +117,7 @@
 
     // Draws the list of tickets and the total from scratch, using the current `ages`.
     function render() {
-      const order = priceOrder(ages, bugs);
+      const order = priceOrder(ages, bugs, cleared);
       list.innerHTML = ''; // clear the old list
       order.tickets.forEach((t, i) => {
         const li = document.createElement('li');
@@ -149,6 +152,8 @@
     // What happens when someone clicks "Clear order": start again with an empty order.
     // It removes all tickets and any message, and the total goes back to €0.00.
     document.getElementById('clear').addEventListener('click', () => {
+      // BUG "clear-keeps-count": the page forgets the tickets but remembers how many there were.
+      if (bugs.includes('clear-keeps-count')) cleared += ages.length;
       ages.length = 0; // empty the list of visitors
       message.textContent = '';
       render();
