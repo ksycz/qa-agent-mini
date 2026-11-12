@@ -603,6 +603,8 @@ What the saved traces of earlier steps cost by these list prices (computed, not 
 
 So Sonnet found every bug, but each found bug cost about 12 to 15 times more than with Haiku.
 
+**First run with the new code** (Haiku, 1 run, `results/eval-latency-check-summary.md`): model call latency p50 2.4 s and p95 3.9 s over 14 calls, run time 37 s, price $0.011, $0.0037 per found bug (3 of 4 found). The 14 calls together took 34.7 s, which is 94% of the run: almost all the time of a run is waiting for the model, not the browser. No cache tokens were reported, as expected without prompt caching.
+
 ```bash
 npm run typecheck && npm test      # new tests in test/cost.test.ts, test/score.test.ts and test/agent.test.ts
 npm run eval -- --bugs=all --runs=1     # costs real money: you run it; the summary has the new lines
