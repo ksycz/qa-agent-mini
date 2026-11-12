@@ -798,6 +798,39 @@ Without bugs (3 runs): 0 false alarms, 13.3 steps, 74,774 tokens per run (5,608 
 4. Steps and tokens per step stay about as in step 9a (14.5 steps, 5,774 tokens per step); an extra test could take a step or two.
 5. The keyword rule is right: no report of another bug is counted as `clear-keeps-count` and the other way round. We check this by reading the titles in the summary.
 
+## Step 9b: a fourth planted bug, the result
+
+Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four bugs, code and prompt as in step 9a. Summary: `results/eval-clearbug-all-summary.md`; traces in `results/eval-traces/clearbug-all`. The secrets scan of the files was clean.
+
+| | Step 9a (3 bugs, 6 runs) | Step 9b (4 bugs, 6 runs), by the keyword score |
+|---|---|---|
+| `senior-discount` | 6 of 6 | 6 of 6 |
+| `group-threshold` | 6 of 6 | **2 of 6** |
+| `limit-off-by-one` | 6 of 6 | **2 of 6** |
+| `clear-keeps-count` | - | 2 of 6 (but see below: not the same 2 runs by hand) |
+| False alarms | 0 | 1 (but see below) |
+| Steps per run (mean) | 14.5 | 12.8 (two runs stopped early: 8 and 11 steps) |
+| Tokens per step | 5,774 | about 5,600 |
+| Replies cut off | 0 | 6 (one or two in 5 of 6 runs) |
+
+**What the traces show.** The new bug is not independent of the others. To test one thing "on a clean order" the agent clicks "Clear order" first (in all 6 runs, at step 3 or 4), and that is exactly the action that switches the bug on. From then on every order of the run carries the cleared tickets into its count:
+
+- A single visitor aged 65 shows €13.50 (the senior bug gives €15.00, and the leaked 10% makes it €13.50). The agent reported "age 65 pays €13.50 instead of €10.00" in 5 of 6 runs, which is a real difference, but the numbers are a mix of two bugs, and run 3 diagnosed it wrongly as "25% off". Only run 5 saw that the €18.00 for a lone adult comes from "Clear order".
+- The group bug is hidden. After a Clear, 8 adults show €18.00 each, which looks correct. Runs 3 and 4 wrote "€144.00 matches" and moved on; `group-threshold` was found only in runs 5 and 6, which looked at the first, uncleared order of 8 (run 5 after reloading the page).
+- `limit-off-by-one` was found in runs 3 and 4. In runs 1 and 5 the budget ended right before the test; runs 2 and 6 stopped early ("the step budget is limited"; that sentence is in the prompt since step 4, so this is new behaviour in 2 of 6 runs, not a new sentence).
+
+**The score is wrong in both directions.** The keyword rule gave `clear-keeps-count` to run 2 ("Senior ticket price wrong in a clear order": the title says "clear", the report is about the senior price). Run 1 reported "Adult (age 30) single ticket priced €18.00 instead of €20.00", which is exactly the clear bug, and the score counted it as a false alarm. By hand: the clear bug was really reported in runs 1 and 5, so 2 of 6 again, but not by the same runs; and there are 0 real false alarms.
+
+**Verdict on the guesses**
+
+1. *`clear-keeps-count` found in 3 or 4 of 6 runs:* **wrong.** 2 of 6 by the score and by hand (different runs).
+2. *The other three stay at 5 or 6 of 6:* **wrong for two of them** (`group-threshold` 2 of 6, `limit-off-by-one` 2 of 6). Cause: the new bug distorts the evidence, plus budget and early stops.
+3. *False alarms stay 0:* wrong by the score (1), true by hand (the one "false alarm" is the clear bug).
+4. *Steps and tokens per step about as in 9a:* tokens per step true; steps 12.8 instead of 14.5 because of two early stops.
+5. *The keyword rule is right:* **wrong** in 2 of 6 runs (one hit for the wrong reason, one miss).
+
+**What we learn.** A planted bug must be independent of the others. Here the trigger ("Clear order") is the agent's most common way to start a clean test, so the bug changes the page for the rest of the run and the other bugs can no longer be measured. It also made the keyword score unreliable, because the reports of two bugs describe the same page behaviour. The eval did get harder (the agent found 2 of 4 bugs per run on average, before 3 of 3), but because the page became confusing, not because the agent became worse at testing, so the numbers cannot be used to compare changes. The bug in this form is not a good ground truth.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
