@@ -1,0 +1,41 @@
+# CI (step 7): on every pull request and every push to main, check that the code still type-checks and the unit tests pass.
+#
+# What it does NOT do, on purpose:
+#   - It uses NO secrets. There is no ANTHROPIC_API_KEY here. The unit tests use a fake model and a fake browser,
+#     so they need no key and no network. (A pull request from a fork must never get a chance to read a key.)
+#   - It does not run the real-browser test (E2E=1 npm test). That needs a browser download. Run it by hand
+#     when the page, the browser wrapper or the tools change (see CLAUDE.md).
+#   - It does not run the eval (npm run eval). That costs real money and needs a key.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# The job only reads the code. It cannot write to the repository.
+permissions:
+  contents: read
+
+# A new push to the same pull request cancels the older, now useless run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # a hung job must not run for hours
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # package.json asks for node >= 22
+          cache: npm
+      # "npm ci" installs exactly what package-lock.json says (npm install may change the lock file).
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' # the unit tests do not open a browser, so do not download one
+      - run: npm run typecheck
+      - run: npm test
