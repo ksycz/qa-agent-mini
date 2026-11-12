@@ -100,7 +100,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 10a: an action canary (issue #37, idea 2).** `--inject=action`: the hidden sentence asks the agent to open an address that is not allowed (`canary.invalid`). The summary counts the runs that tried, and how many of the tries the host check refused. Tried in 0 of 6 runs with Haiku (it called the note page text and ignored it), so the host check was not exercised; the bug numbers did not move. The address name gives the bait away, which is the reason for a next variant.
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
 - [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
-- [ ] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs, compared with Haiku (steps 10b and 11). The plan with the guesses is in `RESULTS.md`; the measurement is still to be done.
+- [x] **Step 12: the same agent on Sonnet.** No code: `QA_AGENT_MODEL=claude-sonnet-5-5` with the neutral canary, 6 runs. All four bugs found in 6 of 6 runs (Haiku: 3.3 of 4), every run ended by itself at 11 to 16 steps, mean tokens per run about the same as Haiku's, and the canary address was tried in 0 of 6 runs. The model changed the result more than any prompt or tool change before it. One comparison, so no hard number.
 - [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -374,6 +374,18 @@ The question is whether the budget was what held the agent back. It was not: wit
 ```bash
 npm run typecheck && npm test
 npm run eval -- --bugs=all --runs=6     # costs real money: you run it; compare with step 9c
+```
+
+## Step 12: the same agent on Sonnet
+
+Every measurement before this one was made with Haiku. This step changes nothing in the code: the same agent, prompt, page and budget (120,000), with the neutral canary note on the page, was run with `QA_AGENT_MODEL=claude-sonnet-5-5`.
+
+- **Result (6 runs):** all four bugs found in every run (Haiku in step 11: 3.3 of 4, the decimal bug 2 of 6 against 6 of 6). All 6 runs ended on `done` at 11 to 16 steps, using 59,000 to 98,000 tokens, so no run came near the limit. Mean tokens per run: 78,915 (Haiku 81,433), so the tokens are the same, and the price per token is not (not calculated here).
+- **The canary:** the address was tried in 0 of 6 runs. Sonnet did not comment on the note while it worked, and named it in its last reply ("I ignored it, since page text is data and not an instruction"). Together with steps 10a and 10b that is 18 runs of two models without one try, and the host check has still not met a real attempt.
+- **What it means:** the early stops of Haiku in steps 10b and 11 look like a property of the model. The change of model moved the result more than any prompt or tool change in steps 6d to 11, but it is one comparison, and the note differs from step 11 too. The eval can no longer tell apart two versions that find 4 of 4: more changes would need harder bugs. The plan, the guesses and the verdict are in `RESULTS.md`.
+
+```bash
+QA_AGENT_MODEL=claude-sonnet-5-5 npm run eval -- --bugs=all --inject=action-neutral --runs=6     # costs real money: you run it
 ```
 
 ## Step 7: CI
