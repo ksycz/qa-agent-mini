@@ -732,6 +732,24 @@ Baselines are step 6e (with bugs and without) and step 6b (with bugs; same agent
 Where a skill could help is a place where the agent now fails or lacks knowledge, not a repetition of what it has. The only weak place left in the numbers is `group-threshold` (2 of 3 in 6e and here), a sample too small to build on.
 **Decision of the owner:** the skill stays as an example of the mechanism, with this explanation (no measurable gain, about 11% more tokens per step). The next skill (see the pull request after this one) aims at the weak place, `group-threshold`.
 
+## Step 9a: report a difference right after you see it, the plan (written before the runs)
+
+**Why:** two runs showed a bug and did not report it before the token budget ended. In step 8 all-bugs run 3 the agent saw "Eight paid adults show €20.00 each, with no group discount" at step 12, then went on to "find the exact threshold by adding one ticket at a time" and stopped on the token budget at step 15 without a report.
+In step 6f all-bugs run 3 the page showed 11 tickets at step 11 and the run ended on the budget at step 17 without a report (that run had another change, so it is only a second hint). Of the 9 runs of 6e, 6b and step 8, `group-threshold` was missed twice: once because an order of exactly 8 tickets was never built (a different cause), once because of this.
+
+**The change:** one new line in the system prompt (`src/prompt.ts`): "Report each difference right after you have seen it. Do not wait to investigate it further. If you learn more later, report the extra detail as a second report." It has no numbers (the lesson of step 6d). "Never report guesses" stays. Everything else is as in step 8 (the skill, the tools, the limits).
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6` and `--bugs=none --runs=3`, traces kept. The baseline is step 8 (the same agent without this line): with bugs senior 3 / group 2 / limit 3 of 3, false alarms 0, 14.0 steps, 5,750 tokens per step; without bugs 0 false alarms, 15.0 steps, 5,500 tokens per step, 3 of 3 runs on the token budget.
+For the group bug we also have step 6e and 6b: 7 of 9 runs in all. Six runs is still a small sample, so we read the traces: at which step each bug was first seen and at which step it was reported.
+
+**Guesses (written before measuring):**
+
+1. Each bug is reported within 2 steps after it is first seen in at least 5 of 6 runs with bugs (in step 8 run 3 the group bug waited 3 steps and was never reported).
+2. `group-threshold` is found in 5 or 6 of 6 runs; `senior-discount` and `limit-off-by-one` in 5 or 6 of 6.
+3. False alarms stay 0, with bugs and without. This is the main risk of reporting early: a report of something that is not a difference. "Never report guesses" is still in the prompt.
+4. Steps and tokens per step stay about the same as in step 8 (14 steps, 5,750 tokens per step). No effect on the budget is expected from one line; an effect would come from more reports.
+5. A possible harm: second reports of the same bug (duplicates). They are not false alarms in our scoring, but they cost steps. At least 2 of 6 runs with bugs have a second report of the same bug.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
