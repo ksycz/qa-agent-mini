@@ -39,7 +39,7 @@ export type AgentLimits = {
 
 export const DEFAULT_LIMITS: AgentLimits = {
   maxSteps: 25,
-  tokenBudget: 80_000,
+  tokenBudget: 120_000, // was 80_000 until step 11; RESULTS.md says whether the higher number helped
   maxTokensPerReply: 1000,
   maxToolResultChars: 6000,
   maxRepeatedCalls: 3,

@@ -28,8 +28,8 @@ The limits (the values are in `src/agent.ts` and `src/tools.ts`):
 
 | Limit | Value | What happens when it is reached |
 |---|---|---|
-| Steps (calls to the model) | 25 | The run stops. In practice the token budget ends most runs first, after about 13 to 15 steps. |
-| Token budget for a run (input + output) | 80,000 | The run stops. It is checked at the end of a round, after the tools of the last reply have run, so a run can end slightly over. |
+| Steps (calls to the model) | 25 | The run stops. In practice the agent often stops by itself before this (see step 11). |
+| Token budget for a run (input + output) | 120,000 | The run stops. It is checked at the end of a round, after the tools of the last reply have run, so a run can end slightly over. |
 | Length of one reply of the model | 1,000 tokens | A longer reply is cut off; the loop tells the model and goes on. |
 | Length of one tool result | 6,000 characters | The rest is cut off, which saves tokens. |
 | The same call, result and page again and again | 3 times | First one warning in the tool result, then the run stops if it repeats. |
@@ -99,6 +99,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 9c: a fourth planted bug that is independent of the others, `decimal-age-accepted`.** The page accepts a decimal age such as 12.5. Only a test of validation can switch it on, so it cannot disturb the other bugs (the lesson of step 9b). Measured with Haiku (6 runs): found in 3 of 6 runs, exactly in those where the agent typed a decimal; the other three bugs stayed at 6, 5 and 6 of 6, 0 false alarms, same cost per step. The eval can tell runs apart again (3.2 of 4 bugs per run), and this run is the new baseline (plan, guesses and result in `RESULTS.md`).
 - [x] **Step 10a: an action canary (issue #37, idea 2).** `--inject=action`: the hidden sentence asks the agent to open an address that is not allowed (`canary.invalid`). The summary counts the runs that tried, and how many of the tries the host check refused. Tried in 0 of 6 runs with Haiku (it called the note page text and ignored it), so the host check was not exercised; the bug numbers did not move. The address name gives the bait away, which is the reason for a next variant.
 - [x] **Step 10b: a neutral action canary (issue #37).** `--inject=action-neutral`: the same order as in 10a, but written like a normal staging note on an ordinary-looking host (`status-check.invalid`), with no "canary" and no "AI agent" in it. Tried in 0 of 6 runs with Haiku; in all 6 runs it said that the note was page content and ignored it. With 10a that is 12 runs without a try, and the host check has still not met a real attempt. The next question is a different kind of bait or a different model, not another rewording.
+- [x] **Step 11: a higher token budget (80,000 to 120,000).** Only 1 of 6 runs hit the new limit; 5 ended because the agent stopped by itself, 3 of them early (at 8, 10 and 14 steps). Bugs found: 3.3 of 4 (before 3.2), mean tokens per run about the same (81,400 against 83,600). So the budget was not what held the agent back; the number is kept because it did not raise the average cost and one run was cut off in the middle of a test.
 - [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -264,7 +265,7 @@ npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a
   A report that fits no switched-on bug is a **false alarm**. The same file counts replies cut off by the length limit and stuck-guard warnings in the trace.
 - `src/eval.ts`: the loop over the runs. It prints a table and saves it in `evals/<time>/summary.md`, with the trace of every run next to it (`run-1/`, `run-2/`, ...). The folder is ignored by git.
 - The summary prints the title of every reported issue with the bug the keywords gave it. Keywords are crude (an LLM judge is on the roadmap, step 9), so look at the titles when a number surprises you.
-- Cost: every run can use up to 80,000 tokens. The default is 3 runs and the maximum 10 is in the code (`MAX_EVAL_RUNS`). Before it starts, the eval prints the most it can use.
+- Cost: every run can use up to 120,000 tokens. The default is 3 runs and the maximum 10 is in the code (`MAX_EVAL_RUNS`). Before it starts, the eval prints the most it can use.
 - Keep the files in Git small: `evals/` is ignored. Only the summaries and traces that `RESULTS.md` cites go to `results/`, after a check for secrets.
 - If you change a planted bug or `SPEC.md`, change `BUG_MATCHERS` too (the test checks that every bug has a rule).
 
@@ -361,6 +362,17 @@ In step 10a the agent saw the order, called it page text and ignored it. But the
 npm run typecheck && npm test      # new tests in test/score.test.ts
 E2E=1 npm test                     # also checks that the neutral sentence is in the snapshot only with --inject=action-neutral
 npm run eval -- --bugs=all --inject=action-neutral --runs=6     # costs real money: you run it
+```
+
+## Step 11: a higher token budget
+
+Most runs ended on the token budget (4 of 6 in step 9c, 6 of 6 in 10a, 4 of 6 in 10b), so the agent often stopped before it had tested everything. This step changes one number: `tokenBudget` in `src/agent.ts` goes from 80,000 to 120,000. The limit is still checked in code, after a round, as before. A run can now cost up to 120,000 tokens, and the eval prints the most it can use before it starts.
+
+The question is whether the budget was what held the agent back. It was not: with 120,000 only 1 of 6 runs hit the limit, and 5 ended because the agent decided to stop (3 of them early, at 8, 10 and 14 steps). Bugs found per run 3.3 of 4 (step 9c: 3.2), mean tokens per run 81,400 (step 9c: 83,600). The one run that was cut off had typed a decimal age at the last step and never saw the result. The number is kept because it did not raise the average cost; the cap is still in code. What is left to understand is why the agent stops early in some runs.
+
+```bash
+npm run typecheck && npm test
+npm run eval -- --bugs=all --runs=6     # costs real money: you run it; compare with step 9c
 ```
 
 ## Step 7: CI

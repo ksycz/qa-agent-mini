@@ -47,7 +47,7 @@ export function parseBugs(value: string | undefined): string[] {
 }
 
 // Reads how many runs the eval should make. Default 3. The maximum is in code, not only in the docs,
-// because every run costs real money (up to 80,000 tokens each).
+// because every run costs real money (up to 120,000 tokens each).
 export const MAX_EVAL_RUNS = 10;
 export function parseRuns(value: string | undefined): number {
   if (value === undefined) return 3;
