@@ -1,6 +1,8 @@
 // Small helpers to read the options typed after a command, for example:
 //   npm run agent -- --bugs=all --inject
 
+import { KNOWN_BUGS } from '../target/pricing.mjs'; // the one list of bug names, so "all" can never be out of date
+
 // Reads one option of the form --name=value. Returns undefined when it is not there.
 export function flag(name: string, argv: string[] = process.argv): string | undefined {
   const hit = argv.find((a) => a.startsWith(`--${name}=`));
@@ -13,13 +15,13 @@ export function hasFlag(name: string, argv: string[] = process.argv): boolean {
 }
 
 // Turns the --bugs value into a list of bug names.
-//   undefined or "all"  -> all three bugs
+//   undefined or "all"  -> all the bugs the page knows (four)
 //   "none"              -> no bugs (the page is correct)
 //   "a,b"               -> exactly those bugs
 export function parseBugs(value: string | undefined): string[] {
   const v = value ?? 'all';
   if (v === 'none') return [];
-  if (v === 'all') return ['senior-discount', 'group-threshold', 'limit-off-by-one'];
+  if (v === 'all') return [...KNOWN_BUGS];
   return v.split(',').filter(Boolean);
 }
 

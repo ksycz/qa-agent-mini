@@ -11,7 +11,9 @@ import { STUCK_WARNING } from './stuck-guard';
 
 // One keyword rule per planted bug. If you change a bug or SPEC.md, change this too (see CLAUDE.md).
 // The order matters: the first rule that fits wins. "senior" is last because a report about another bug may mention age 65 on the way.
+// "decimal-age-accepted" is first and uses words, not a pattern like "1.5": that would also match prices such as "€13.50".
 export const BUG_MATCHERS: Record<string, RegExp> = {
+  'decimal-age-accepted': /decimal|fraction|non-?integer|whole number|float|\b\d+\.5\b/i,
   'group-threshold': /group|\b8\b|eight|10 ?%/i,
   'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum/i,
   'senior-discount': /senior|\b65\b/i,

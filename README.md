@@ -12,7 +12,7 @@ The agent is a small AI tester. You give it a web page and a written specificati
 4. When the page does something different from the spec, it reports an issue with the steps, the expected result and the actual result.
 5. When it has tested enough, it stops and writes a short summary.
 
-The page is a ticket price calculator with three bugs planted on purpose. Because we know the bugs, we can measure the agent:
+The page is a ticket price calculator with four bugs planted on purpose. Because we know the bugs, we can measure the agent:
 how many bugs it finds, how many false alarms it raises, and how many steps, tokens and euros a run costs.
 
 The agent decides what to test next. Our code does everything else: it runs the browser, blocks unsafe actions,
@@ -27,7 +27,7 @@ The goal of this repo is to understand how an agent is built: the tools, the loo
 A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
 This is a learning project, not a replacement for the Playwright agents.
 
-**Where we are:** the agent works end to end with a real model, and every change since step 5 has been measured with the eval (`npm run eval`). The page has three planted bugs; the agent finds them in most runs. What we learned is collected in "Lessons so far" below, and the open ideas are in the last roadmap item.
+**Where we are:** the agent works end to end with a real model, and every change since step 5 has been measured with the eval (`npm run eval`). The page has four planted bugs (the fourth came in step 9c). What we learned is collected in "Lessons so far" below, and the open ideas are in the last roadmap item.
 
 ## How to read this repo
 
@@ -35,7 +35,7 @@ Every file starts with a comment that says what it is for, and the code is comme
 Read the files in this order:
 
 1. `SPEC.md`: what the page should do.
-2. `target/pricing.mjs`: the rules, and where the three bugs are planted.
+2. `target/pricing.mjs`: the rules, and where the four bugs are planted.
 3. `target/index.html`: the page (the script at the bottom is the logic).
 4. `src/serve-target.ts`: the small server that shows the page.
 5. `test/pricing.test.ts`: how the rules are tested.
@@ -79,7 +79,8 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 8: skills for the agent.** A `load_skill` tool and a `skills/` folder; the prompt holds only a menu. The skill was loaded in 6 of 6 runs, but it brought no measurable gain and a step costs about 11% more tokens. Kept as an example of the mechanism.
 - [x] **Step 9a: a prompt line: report a difference right after you see it.** All 3 bugs found in 6 of 6 runs, 0 false alarms, same cost per step. No harm, but it does not fix the late notice of the group bug. Kept.
 - [x] **Step 9b: tried and not kept: a fourth planted bug, `clear-keeps-count`.** The agent clears the order at the start of almost every test, which switched the bug on and hid the other bugs (2 of 6 each, before 6 of 6). Reverted; a planted bug has to be independent of the others.
-- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: an independent fourth planted bug (the eval is at its ceiling), a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
+- [ ] **Step 9c: a fourth planted bug that is independent of the others, `decimal-age-accepted`.** The page accepts a decimal age such as 12.5. Only a test of validation can switch it on, so it cannot disturb the other bugs (the lesson of step 9b). Built; not measured yet (plan and guesses in `RESULTS.md`). Runs from now on have four bugs, so they are not directly comparable with step 9a and before.
+- [ ] **Step 9: make it better.** Each change measured with the eval, one at a time. Candidates: a stronger canary (issue #37), a prompt line against a `snapshot` after every `add_visitors`, a prompt line against stopping early without any number in it, a better note where an old snapshot was removed, a smaller `add_visitors` result, the length limit per reply and hidden thinking, prompt caching, a cheaper model for routine steps, an LLM judge instead of keyword scoring.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
@@ -100,8 +101,8 @@ The short version of what the steps taught us. Each one has a section below and 
 
 Before an agent can test anything, we need a page to test and a way to know the right answer.
 
-- `target/pricing.mjs`: the pricing rules of a ticket calculator, with three bugs that can be switched on
-  (`senior-discount`, `group-threshold`, `limit-off-by-one`).
+- `target/pricing.mjs`: the pricing rules of a ticket calculator, with the bugs that can be switched on
+  (`senior-discount`, `group-threshold`, `limit-off-by-one`; later also `decimal-age-accepted`).
 - `target/index.html`: the page itself.
 - `src/serve-target.ts`: starts the page locally. Also can inject a hidden instruction (used much later for a security test).
 - `SPEC.md`: the written requirements. A bug is a difference between the page and this document.
@@ -166,13 +167,13 @@ You need an API key from https://console.anthropic.com and a little credit. Keep
 
 ```bash
 export ANTHROPIC_API_KEY=your-key        # only in this terminal window
-npm run agent -- --bugs=all              # the page has three bugs
+npm run agent -- --bugs=all              # the page has all four bugs
 npm run agent -- --bugs=none             # the page is correct: a good agent reports nothing
 ```
 
 What to look at after a run:
 
-1. The printed issues. Which of the three bugs did it find? Did it report anything that is not a bug (a false alarm)?
+1. The printed issues. Which of the four bugs did it find? Did it report anything that is not a bug (a false alarm)?
 2. `runs/<time>/trace.jsonl`. Follow the run line by line: what did the model ask for, what did it get back?
 3. The last line of the output: how many steps and tokens did the run use, and why did it stop?
 
@@ -235,7 +236,7 @@ A model does not do the same thing twice, so one run proves little (run 9 used 5
 
 ```bash
 export ANTHROPIC_API_KEY=your-key
-npm run eval -- --bugs=all --runs=3     # the page has three bugs
+npm run eval -- --bugs=all --runs=3     # the page has all four bugs
 npm run eval -- --bugs=none --runs=3    # the page is correct: every report is a false alarm
 ```
 
@@ -345,6 +346,21 @@ In two runs the agent saw a bug, went on investigating it and the token budget e
 - **Result:** all 3 bugs found in 6 of 6 runs, 0 false alarms in 9 runs, the same cost per step as in step 8. In 2 of 6 runs the agent sent more than one report about the same bug (duplicates).
 - **What it did not fix:** the group bug was still often reported late. In the traces we read, the page already showed the missing discount early, but the model did not notice it until later and then reported it at once. It was not waiting, it had not noticed.
 - **What we kept:** the line. It does no harm that we can see, but we cannot prove a gain (the baseline had 3 runs). The plan, the guesses and the result are in `RESULTS.md`.
+
+## Step 9c: a fourth planted bug that is independent (`decimal-age-accepted`)
+
+Step 9b showed what a good planted bug needs: nothing the agent does all the time may switch it on. This bug is switched on only by typing a decimal age.
+
+- **The bug:** the page takes an age such as 12.5 as valid and adds a ticket, instead of showing "Enter an age from 0 to 120." `SPEC.md` already says that a valid age is a whole number, so the spec did not change. The list of boundary values in the spec was left as it is, on purpose: adding 12.5 there would point the agent at the bug.
+- **Where:** the rule "is this a valid age?" moved from the page into `isValidAge` in `target/pricing.mjs`, next to the other rules, so a unit test can check it (the bug changes only whole numbers into "any number"; empty, -1, 121 and "abc" are still refused).
+- **Why we think it is independent:** in the 18 earlier runs that had `add_visitors`, a decimal was typed in 8 runs, always inside a test of validation. The tool `add_visitors` refuses decimals, so the agent has to use `fill` and `click`, which is the normal way to test invalid input. A decimal that is accepted adds one ticket, like the 11th ticket of `limit-off-by-one`, but only in the test that looks for it.
+- **Not measured yet:** the plan and the guesses are in `RESULTS.md`.
+
+```bash
+npm run typecheck && npm test      # new tests in test/pricing.test.ts and test/score.test.ts
+E2E=1 npm test                     # also types 12.5 on the real page, with and without the bug
+npm run eval -- --bugs=all --runs=6     # costs real money: you run it
+```
 
 ## Step 9b: a fourth planted bug (tried, not kept)
 

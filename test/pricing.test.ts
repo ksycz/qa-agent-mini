@@ -10,7 +10,7 @@
 // Run all tests with: npm test
 
 import { describe, expect, it } from 'vitest';
-import { ageTicketCents, maxTickets, priceOrder } from '../target/pricing.mjs';
+import { ageTicketCents, isValidAge, maxTickets, priceOrder } from '../target/pricing.mjs';
 
 describe('age prices', () => {
   // Each row is [age, expected price in cents]. We test the BORDERS between age groups:
@@ -36,5 +36,22 @@ describe('order', () => {
   it('max is 10, bug makes it 11', () => {
     expect(maxTickets([])).toBe(10);
     expect(maxTickets(['limit-off-by-one'])).toBe(11);
+  });
+});
+
+describe('age validation', () => {
+  // A valid age is a whole number from 0 to 120 (SPEC.md). Everything else is refused.
+  it.each(['0', '5', '17', '65', '120'])('accepts %s', (raw) => expect(isValidAge(raw, [])).toBe(true));
+  it.each(['', '-1', '121', '12.5', '0.5', 'abc'])('refuses "%s"', (raw) => expect(isValidAge(raw, [])).toBe(false));
+  // With the bug, a decimal age passes. Everything else is still refused, so the bug is only about decimals.
+  it('bug decimal-age-accepted lets 12.5 and 0.5 pass', () => {
+    expect(isValidAge('12.5', ['decimal-age-accepted'])).toBe(true);
+    expect(isValidAge('0.5', ['decimal-age-accepted'])).toBe(true);
+  });
+  it.each(['', '-1', '-0.5', '120.5', '121', 'abc'])('bug decimal-age-accepted still refuses "%s"', (raw) => {
+    expect(isValidAge(raw, ['decimal-age-accepted'])).toBe(false);
+  });
+  it('the other bugs do not change the validation (they are independent of it)', () => {
+    expect(isValidAge('12.5', ['senior-discount', 'group-threshold', 'limit-off-by-one'])).toBe(false);
   });
 });

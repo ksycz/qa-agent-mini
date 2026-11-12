@@ -15,13 +15,23 @@ export const BASE_CENTS = 2000; // adult ticket: €20.00
 export const MAX_TICKETS = 10;
 
 // The names of all bugs that can be switched on. Used to check typos in `--bugs=...`.
-export const KNOWN_BUGS = ['senior-discount', 'group-threshold', 'limit-off-by-one'];
+export const KNOWN_BUGS = ['senior-discount', 'group-threshold', 'limit-off-by-one', 'decimal-age-accepted'];
 
 // How many tickets one order may contain.
 // `bugs` is a list of bug names, for example ['limit-off-by-one']. Default: no bugs.
 export function maxTickets(bugs = []) {
   // BUG "limit-off-by-one": the page allows 11 tickets instead of 10.
   return bugs.includes('limit-off-by-one') ? MAX_TICKETS + 1 : MAX_TICKETS;
+}
+
+// Is the text typed in the age field a valid age? `raw` is the text, already trimmed. Valid: a whole number from 0 to 120 (see SPEC.md).
+// The page calls this before it adds a ticket; it lives here so the unit tests can check it.
+export function isValidAge(raw, bugs = []) {
+  if (raw === '') return false; // an empty field is not an age
+  const age = Number(raw); // "12.5" -> 12.5, "abc" -> NaN
+  // BUG "decimal-age-accepted": any number is taken as a whole number, so 12.5 passes. (NaN, such as "abc", still fails: it is not finite.)
+  const isWhole = bugs.includes('decimal-age-accepted') ? Number.isFinite(age) : Number.isInteger(age);
+  return isWhole && age >= 0 && age <= 120;
 }
 
 // The price of ONE ticket, based on the visitor's age only (no group discount yet).

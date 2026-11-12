@@ -833,6 +833,24 @@ Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four
 
 **What we learn.** A planted bug must be independent of the others. Here the trigger ("Clear order") is the agent's most common way to start a clean test, so the bug changes the page for the rest of the run and the other bugs can no longer be measured. It also made the keyword score unreliable, because the reports of two bugs describe the same page behaviour. The eval did get harder (the agent found 2 of 4 bugs per run on average, before 3 of 3), but because the page became confusing, not because the agent became worse at testing, so the numbers cannot be used to compare changes. The bug in this form is not a good ground truth.
 
+## Step 9c: a fourth planted bug, `decimal-age-accepted`, the plan (written before the runs)
+
+**Why:** after step 9a all three bugs were found in 6 of 6 runs, and the first try at a fourth bug (9b, `clear-keeps-count`) failed because the agent's most common action switched it on and hid the other bugs. A fourth bug has to be independent.
+
+**The change:** the page accepts a decimal age such as 12.5 and adds a ticket (the spec says it must show "Enter an age from 0 to 120."). Only typing a decimal into the age field switches it on. The validation moved into `isValidAge` in `target/pricing.mjs`. `SPEC.md` is unchanged (it already says a valid age is a whole number); the table "Boundaries worth testing" has no decimal on purpose. A new score rule comes first in `BUG_MATCHERS` and uses words (`decimal`, `fraction`, `whole number`, ...) and not a pattern like "1.5", which would also match prices such as "€13.50". `--bugs=all` now reads `KNOWN_BUGS`. Code, prompt and tools are otherwise as in step 9a.
+
+**The independence check, made before building:** in the 18 earlier runs that had `add_visitors` (addvisitors, canary, trimadd, skills and report evals) a decimal was typed in the age field in 8 runs (44%): canary 1 of 3, trimadd 1 of 3, skills 2 of 3, report 4 of 6, addvisitors 0 of 3. It is always part of a validation test, never part of "a clean order".
+
+**How we measure:** `npm run eval -- --bugs=all --runs=6` (four bugs). `--bugs=none` is not repeated: validation without the bug behaves as before (a unit test checks it) and the correct page is the same. The comparison with step 9a is not like for like (four bugs there are three), so this run is the new baseline.
+
+**Guesses (written before measuring):**
+
+1. `decimal-age-accepted` is found in 2 to 4 of 6 runs.
+2. `senior-discount`, `group-threshold` and `limit-off-by-one` stay at 5 or 6 of 6 each (the bug is independent of them).
+3. False alarms stay 0.
+4. Steps and tokens per step stay about as in step 9a (14.5 steps, 5,774 tokens per step).
+5. The score rule is right: no report of another bug is counted as the decimal bug, and none of the decimal bug is lost. We check this by reading the titles in the summary.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps

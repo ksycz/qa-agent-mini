@@ -47,8 +47,8 @@ describe('cli-args', () => {
   it('reads a flag', () => expect(flag('bugs', ['node', 'x', '--bugs=none'])).toBe('none'));
   it('returns undefined for a missing flag', () => expect(flag('bugs', ['node', 'x'])).toBeUndefined());
   it('all, none and a list', () => {
-    expect(parseBugs(undefined)).toHaveLength(3);
-    expect(parseBugs('all')).toHaveLength(3);
+    expect(parseBugs(undefined)).toHaveLength(4);
+    expect(parseBugs('all')).toHaveLength(4);
     expect(parseBugs('none')).toEqual([]);
     expect(parseBugs('senior-discount,group-threshold')).toEqual(['senior-discount', 'group-threshold']);
   });
