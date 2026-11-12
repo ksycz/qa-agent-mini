@@ -117,6 +117,43 @@ The short version of what the steps taught us. Each one has a section below and 
 7. **A planted bug must be independent of the others** (step 9b). Our fourth bug was switched on by "Clear order", and the agent clicks that button at the start of almost every test to get a clean order. From then on every price on the page was a mix of two bugs, so the agent found the other bugs less often and the score gave points for the wrong reasons. Test: ask "does the agent do something all the time that switches this bug on?". If yes, it is not a good bug.
 8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits.
 
+## Ideas for later (not planned)
+
+Nothing here is on the roadmap and none of it is started. It is a list of what could come next, so the ideas are not lost. Each idea says what it is, why it would be interesting, and how big it is. If one of them is picked up, it follows the usual rule: one step, one branch, one pull request, a guess written before the measurement.
+
+**Safety**
+
+- **More canaries** (issue #37). So far the hidden sentence was one short note on the page, and Haiku obeyed it in no run (0 of 3 in step 6b, 0 of 6 in 10a, 0 of 6 in 10b). Variants that are still missing:
+  - an order that looks like it comes from the product owner, or an "addendum to the spec";
+  - the order in an unexpected place: the answer of a tool, an error message, the label of a button;
+  - an order that asks to leak something: a fake secret that must never appear in a report;
+  - a second model (step 12 tries Sonnet with the neutral note).
+
+  Why: the host check in code has never met a real attempt in a run with a model. Size: small each (the text, a line in the scoring, a measurement).
+- **A test that the protection holds even when the agent is fooled.** A fake "agent" that does what the page says, run against the real tools, to check that the host check and the limits refuse it. No model and no cost, so it can be a normal unit test. Size: small.
+
+**Honest scoring**
+
+- **Reward hacking checks.** The agent is rewarded when a report title matches our keywords. It could be "rewarded" without testing anything (a title that lists the keywords, a report of a bug it never saw). A check could read the trace and ask: did the agent see this in the page before it reported it? A first version needs no model: look for the wrong value in the snapshots before the `report_issue` call. Size: medium.
+- **An LLM as the judge** instead of the keyword rules. A model reads the report, `SPEC.md` and the relevant steps from the trace, and says which planted bug (if any) the report is about, and whether the report is true. Why: keywords are crude (step 9c had to avoid a pattern that also matches prices such as "13.50"), and a judge could also catch a false report. Risks: the judge costs money, makes mistakes of its own, and needs a hand-labelled set of titles to check it against (we already have more than 100 real titles in `results/`). Size: medium to large.
+- **More runs or a better statistic.** Six runs show only large differences; one bug more or less in one run is noise. A small table with the spread (not only the mean) would help to see this. Size: small.
+
+**A better agent**
+
+- **Why does the agent stop early?** In some runs it ends after 8 to 10 steps, with a "done" and a sentence like "I stopped here" (steps 10b and 11). Ideas: a prompt line without any number in it ("before you finish, check every row of the spec"), or a check in code that lists the areas of `SPEC.md` that were never touched and sends the agent back. Lesson 2 warns against numbers in the prompt. Size: small to medium.
+- **Prompt caching.** Every step sends the same system prompt, spec and tools again. Caching that part should make a run cheaper. Size: small to medium; the effect is easy to measure in tokens.
+- **A cheaper model for the routine steps**, and a stronger one for the thinking steps. Size: large; the gain is not certain.
+- **A second skill**, for example one about the price rules. The first skill (step 8) was loaded in every run and changed nothing, so the first question is what a skill should contain to matter. Size: small, expected gain small.
+
+**A bigger target**
+
+- **More planted bugs of different kinds**, or a second page. A new bug must be independent of the others (lesson 7), so the independence check from step 9c comes first. Size: medium each.
+
+**For showing it to other people**
+
+- **A small page that shows one trace** (the steps, the tool calls and the answers) in a readable way. It would make it easier to explain how the agent works. Size: small to medium.
+- **A scheduled run in CI** with a tiny eval and a cost cap, so a change that makes the agent worse is noticed. CI today (step 7) runs no model. Size: medium; it needs the API key stored as a secret.
+
 ## Step 1: the thing to test (no AI yet)
 
 Before an agent can test anything, we need a page to test and a way to know the right answer.
