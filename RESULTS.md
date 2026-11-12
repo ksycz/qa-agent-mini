@@ -1013,6 +1013,41 @@ Run: `npm run eval -- --bugs=all --inject=action-neutral --runs=6` with Haiku (`
 
 **What this will not show:** 6 runs with one model. A difference of one bug in one run is noise.
 
+## Step 11: a higher token budget, the result
+
+Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), four bugs, no canary, `tokenBudget` 120,000 (the trace of every run records it). Summary: `results/eval-budget-all-summary.md`; traces in `results/eval-traces/budget-all`. The secrets scan of the files was clean.
+
+| | Step 9c (budget 80,000) | Step 11 (budget 120,000) |
+|---|---|---|
+| `senior-discount` / `group-threshold` / `limit-off-by-one` found | 6 / 5 / 6 of 6 | 6 / 6 / 6 of 6 |
+| `decimal-age-accepted` found | 3 of 6 | 2 of 6 |
+| Bugs found per run (mean) | 3.2 of 4 | 3.3 of 4 (4 of 4 in 2 runs, 3 of 4 in 4 runs) |
+| False alarms | 0 | 0 |
+| Steps per run (mean) | 14.8 | 13.8 |
+| Tokens per run (mean) | about 83,600 | 81,433 (min 35,953, max 126,768) |
+| Tokens per step | about 5,650 | about 5,900 |
+| Stopped on the token budget | 4 of 6 | **1 of 6** (the other 5 ended on `done`) |
+
+**The budget was not what held the agent back.** With 120,000 only 1 run of 6 hit the limit. The other 5 ended on `done`: the agent decided to stop. Three of them stopped early and said so: run 1 at step 10 ("I stopped here after testing the main rules"), run 2 at step 8 ("I did not test the age validation messages or the Clear order button"), run 5 at step 14. Runs 1 and 2 used only 47,541 and 35,953 tokens, far below even the old limit. More budget cannot help a run that stops by itself. This is the same kind of behaviour as in step 6d, where a prompt that mentioned the budget made the agent stop early.
+
+**One run was cut off at the worst moment.** Run 6 typed the decimal 12.5 and clicked "Add visitor" at step 18, the last step before the limit (126,768 tokens), so it never saw the result and never reported the bug. It would probably have found it with a little more budget. That is the one case where the budget mattered. Run 4 also needed the extra room (116,297 tokens, 18 steps, it typed a decimal at step 14 and reported it), but I cannot tell from 6 runs whether the old limit would have cut it before that.
+
+**The cost did not go up on average.** The mean is 81,433 tokens per run against about 83,600 before, because the runs that stop by themselves use less. The worst case is higher (up to 120,000 tokens per run, and one run reached 126,768), which is why the eval prints the maximum before it starts.
+
+**The bug numbers did not move.** 3.3 of 4 against 3.2 is noise. The decimal bug was found in 2 of 6 runs, in the runs where a decimal reached the page by `fill` and the agent saw the result (runs 3 and 4). In run 6 it reached the page and was not seen, as described above; in runs 1, 2 and 5 no decimal was typed.
+
+**The score is right.** I read all 24 report titles: no false alarms, and the second reports of `group-threshold` in runs 4, 5 and 6 do not change the score.
+
+**Verdict on the guesses**
+
+1. *The mean is 18 to 21 steps per run:* **false** (13.8). Five of 6 runs ended by themselves.
+2. *Bugs found 3.3 to 3.6 of 4, no big jump:* **true** (3.3).
+3. *Tokens per step about 6,000 to 6,500:* **false** (about 5,900, only 4% more than before).
+4. *False alarms 0 or 1:* **true** (0).
+5. *"It costs more and gains little":* **half true**: it gained nothing I can measure, and it did not cost more on average.
+
+**What we learn.** Where the agent stops is mostly its own decision, not the limit. A higher budget is a safe, cheap change (the cap is still in code and the average cost is the same), but it fixes only the rare run that is cut off in the middle of a test. The plan said I would put the budget back to 80,000 if the gain was small. I keep 120,000 because the average cost did not rise and run 6 shows a real cut-off at the end; if you prefer the old number, it is one line in `src/agent.ts`. The question that remains is why the agent stops after 8 to 10 steps in some runs; the next things to try would be about that (a prompt line without any number in it), not about limits.
+
 ## Summary of runs 1 and 2
 
 Two runs with no change in between gave the same result: the same two bugs found, the same bug missed, no false alarms, 14 steps
