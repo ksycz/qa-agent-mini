@@ -1,6 +1,7 @@
 // STEP 3 DEMO: the agent loop with a FAKE brain and the REAL browser.
 //
 // Run it with:  npm run loop
+//               npm run loop -- --engine=graph    the same, with the LangGraph version of the loop (step 20)
 //
 // What it does: the fake model follows a prepared script (open the page, add a 65-year-old, read the page,
 // report the wrong price, say it is finished). The loop and the tools are the real ones from steps 2 and 3.
@@ -9,6 +10,8 @@
 // There is no AI and no API key here. In step 4 we replace the fake with a real model, and the loop does not change.
 
 import { runAgent } from './agent';
+import { flag, parseEngine } from './cli-args';
+import { runGraphAgent } from './graph-agent';
 import { launchBrowser } from './browser';
 import { say, scriptedLlm, toolCall } from './fake-llm';
 import { startTarget } from './serve-target';
@@ -28,8 +31,11 @@ const llm = scriptedLlm([
   say('I tested one senior ticket and found 1 issue.'),
 ]);
 
+const engine = parseEngine(flag('engine')); // step 20: which version of the loop
+console.log(`Loop: ${engine === 'graph' ? 'LangGraph (src/graph-agent.ts)' : 'hand-written (src/agent.ts)'}\n`);
+
 try {
-  const result = await runAgent({
+  const result = await (engine === 'graph' ? runGraphAgent : runAgent)({
     llm,
     tools: { browser, allowedHosts, maxSnapshotChars: 5000, issues: [], skills: NO_SKILLS },
     system: 'You are a QA tester.', // the fake model ignores it; a real model would read it

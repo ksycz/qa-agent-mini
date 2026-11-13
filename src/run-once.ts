@@ -9,11 +9,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runAgent, type AgentResult } from './agent';
+import { runGraphAgent } from './graph-agent';
 import { launchBrowser } from './browser';
 import { createAnthropicClient } from './llm';
 import { buildSystemPrompt, loadSpec, taskFor } from './prompt';
 import { folderSkillStore } from './skills';
-import type { InjectKind } from './cli-args';
+import type { Engine, InjectKind } from './cli-args';
 import { startTarget } from './serve-target';
 import { fileTrace } from './trace';
 import { writeTracePage } from './trace-page';
@@ -22,11 +23,12 @@ export async function runOnce(opts: {
   bugs: string[]; // which planted bugs the page has (an empty list = a correct page)
   inject?: InjectKind | false; // which hidden canary sentence goes on the page (step 6b, 10a). Default: none.
   pressure?: boolean; // step 19: add the temptation line to the system prompt. Default: no.
+  engine?: Engine; // step 20: which version of the loop runs. Default: the hand-written loop.
   model: string;
   dir: string; // the folder for this run's files
   log?: (line: string) => void; // optional: print each step as it happens
 }): Promise<AgentResult> {
-  const { bugs, inject = false as InjectKind | false, pressure = false, model, dir, log } = opts;
+  const { bugs, inject = false as InjectKind | false, pressure = false, engine = 'loop' as Engine, model, dir, log } = opts;
   mkdirSync(dir, { recursive: true });
 
   const skills = folderSkillStore(); // the guides in the skills/ folder (step 8)
@@ -36,16 +38,18 @@ export async function runOnce(opts: {
   const browser = await launchBrowser(allowedHosts);
 
   try {
-    log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   canary sentence on the page: ${inject || 'no'}   model: ${model}\n`);
+    log?.(`Page: ${target.url}   bugs switched on: [${bugs.join(', ') || 'none'}]   canary sentence on the page: ${inject || 'no'}   model: ${model}   loop: ${engine}\n`);
 
-    const result = await runAgent({
+    // Step 20: both versions take the same arguments, so switching between them is one line.
+    const run = engine === 'graph' ? runGraphAgent : runAgent;
+    const result = await run({
       llm: createAnthropicClient(model),
       tools: { browser, allowedHosts, maxSnapshotChars: 5000, issues: [], skills },
       system: buildSystemPrompt(skills.list(), { pressure }), // the menu of skills is part of the prompt, so the trace shows it
       task: taskFor(target.url, loadSpec()),
       log,
       trace: fileTrace(join(dir, 'trace.jsonl')), // everything the agent did, saved to a file
-      info: { model, bugs, inject, pressure, skills: skills.list().map((x) => x.name) }, // the trace says which model, which bugs and whether the canary sentence was on the page
+      info: { model, engine, bugs, inject, pressure, skills: skills.list().map((x) => x.name) }, // the trace says which model, which bugs and whether the canary sentence was on the page
     });
 
     writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));

@@ -37,6 +37,17 @@ export function parseInject(argv: string[] = process.argv): InjectKind | false {
   throw new Error('--inject must be --inject, --inject=report, --inject=action or --inject=action-neutral');
 }
 
+// Which version of the agent loop runs (step 20):
+//   'loop'  = the hand-written `while` loop in src/agent.ts (the default, used in every step before)
+//   'graph' = the same loop built with LangGraph, in src/graph-agent.ts
+export type Engine = 'loop' | 'graph';
+export function parseEngine(value: string | undefined): Engine {
+  if (value === undefined || value === 'loop') return 'loop';
+  if (value === 'graph') return 'graph';
+  // A typo must not silently run the other version, because a measurement would then compare the wrong thing.
+  throw new Error('--engine must be --engine=loop or --engine=graph');
+}
+
 // Turns the --bugs value into a list of bug names.
 //   undefined or "all"  -> all the bugs the page knows (four)
 //   "none"              -> no bugs (the page is correct)

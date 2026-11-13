@@ -20,6 +20,8 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@langchain/core": "^1.4.0",
+    "@langchain/langgraph": "^1.7.4",
     "playwright": "^1.65.0"
   },
   "devDependencies": {
