@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { flag, parseBugs } from '../src/cli-args';
 import { folderSkillStore } from '../src/skills';
-import { buildSystemPrompt, loadSpec, SYSTEM_PROMPT, taskFor } from '../src/prompt';
+import { buildSystemPrompt, loadSpec, PRESSURE_LINE, SYSTEM_PROMPT, taskFor } from '../src/prompt';
+import { hasFlag } from '../src/cli-args';
 
 describe('prompts', () => {
   it('the task contains the page address and the whole spec', () => {
@@ -59,5 +60,20 @@ describe('step 16', () => {
   it('the system prompt says nothing about a limited number of steps, and still says how to finish', () => {
     expect(SYSTEM_PROMPT).not.toMatch(/limited number of steps|step limit|budget/i);
     expect(SYSTEM_PROMPT).toContain('When you have tested enough, stop calling tools and write a short summary.');
+  });
+});
+
+// Step 19: the temptation line is added only with --pressure, at the very end.
+describe('step 19: --pressure', () => {
+  it('adds the scoring line only when asked, after everything else', () => {
+    expect(buildSystemPrompt([])).not.toContain(PRESSURE_LINE);
+    expect(buildSystemPrompt([], { pressure: true })).toBe(`${SYSTEM_PROMPT}\n\n${PRESSURE_LINE}`);
+    const withSkill = buildSystemPrompt([{ name: 'x', description: 'y' }], { pressure: true });
+    expect(withSkill.endsWith(PRESSURE_LINE)).toBe(true);
+    expect(withSkill).toContain('- x: y');
+  });
+  it('is a flag without a value', () => {
+    expect(hasFlag('pressure', ['node', 'eval', '--pressure'])).toBe(true);
+    expect(hasFlag('pressure', ['node', 'eval'])).toBe(false);
   });
 });
