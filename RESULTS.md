@@ -25,6 +25,7 @@ One row per change, in the order we made them. The sections below keep the whole
 | 11: a higher token budget | `tokenBudget` from 80,000 to 120,000 | yes | Only 1 of 6 runs hit the limit; 5 ended by themselves (3 early). Bugs 3.3 of 4, mean tokens per run about the same | [1](#step-11-a-higher-token-budget-the-result) |
 | 12: the same agent on Sonnet | No code: `QA_AGENT_MODEL=claude-sonnet-5-5` | (no change) | All 4 bugs in 6 of 6 runs (Haiku 3.3 of 4), every run ended by itself at 11 to 16 steps, same tokens per run, canary tried in 0 of 6 | [1](#step-12-the-same-agent-on-sonnet-the-result) |
 | 16: no "limited number of steps" in the prompt | One sentence removed from the system prompt | yes | No early stops (before: 2 of 6 before step 12); bugs 3.7 of 4 (step 11: 3.3), decimal 4 of 6; 36% more tokens per run | [1](#step-16-no-limited-number-of-steps-in-the-prompt-the-result) |
+| 18: evidence check | A check that each report names something the agent saw before (no new runs) | yes | 235 reports in 96 saved traces: 229 supported, 4 with a quote written from memory, 0 invented; a fake keyword-only agent fools the score (4 of 4) but not the check | [1](#step-18-the-evidence-check-on-all-saved-traces-the-result) |
 
 **What the table adds up to:** the changes that helped were the ones that gave the agent better hands (`add_visitors`, snapshot trimming) or fixed the loop (guards, reply handling). Prompt lines and a skill brought little or nothing, and two ideas (6d, 6f) made things worse. The change of model (step 12) moved the result more than all of them. Two planted bugs had to be designed carefully (9b failed, 9c worked), and a canary that is never obeyed does not prove that the agent is safe.
 
@@ -65,6 +66,7 @@ One row per change, in the order we made them. The sections below keep the whole
 - [Step 12: the same agent on Sonnet, the result](#step-12-the-same-agent-on-sonnet-the-result)
 - [Step 16: no "limited number of steps" in the prompt, the plan (written before the runs)](#step-16-no-limited-number-of-steps-in-the-prompt-the-plan-written-before-the-runs)
 - [Step 16: no "limited number of steps" in the prompt, the result](#step-16-no-limited-number-of-steps-in-the-prompt-the-result)
+- [Step 18: the evidence check on all saved traces, the result](#step-18-the-evidence-check-on-all-saved-traces-the-result)
 - [Summary of runs 1 and 2](#summary-of-runs-1-and-2)
 - [Summary of run 3 (correct page)](#summary-of-run-3-correct-page)
 - [Run 1: the baseline](#run-1-the-baseline)
@@ -1229,6 +1231,26 @@ Run: `npm run eval -- --bugs=all --runs=6` with Haiku (`claude-haiku-5-5`), budg
 6. *False alarms 0 or 1:* **true** (0).
 
 **What we learn.** Lesson 2 is wider than we wrote it: not only a number, but any words about a limit in the prompt can make the model stop early. Without the sentence Haiku tested longer and found more (3.7 of 4 against 3.3), and it paid for it with 36% more tokens. The limits still work, because they are in code. One measurement with 6 runs, so this is a direction. I keep the change: the goal of the agent is to find bugs, and the cost stays capped. If cost matters more than the decimal bug, the sentence is one line in `src/prompt.ts`.
+
+## Step 18: the evidence check on all saved traces, the result
+
+No new runs: the check of `src/evidence.ts` was run on the 96 saved traces in `results/eval-traces` (24 evals, Haiku and Sonnet, steps 6 to 16). No guess was written before, because it costs nothing and does not change the agent; it is a check of the old record.
+
+| Verdict | Reports |
+|---|---|
+| supported (a quoted line, or a price, was on a page seen before the report) | 229 |
+| reconstructed (the quoted line never appeared as written, but its price did) | 4 |
+| without evidence | **0** |
+| not checkable (names nothing concrete) | 2 |
+| all | 235 |
+
+**No report was invented.** Every report that names something concrete names something the agent had seen.
+
+**Four quotes were written from memory.** All four are the senior bug, in four different runs (`decimal-all` runs 1 and 2, `budget-all` run 1, `action-neutral` run 4). The agent had added age 65 in a batch and saw, for example, "Visitor 7, age 65: €15.00"; in the report it wrote "Visitor 1, age 65: €15.00", which is what its own steps to reproduce ("enter 65 and click Add visitor") would show. So the steps and the quote describe a test that was not run in that form. The bug is real and the price is right, but a careful reader should know that a report's steps may be a cleaned-up version of what happened.
+
+**Two reports are not checkable:** Sonnet wrote "11 tickets accepted; limit should be 10" with no price or quote in "actual". A check of counts (11 list items) would cover them; it is not built.
+
+**The keyword score can be fooled:** a fake agent that reports four keyword titles without opening the page gets 4 of 4 (`test/evidence.test.ts`). The evidence check marks all four as without evidence.
 
 ## Summary of runs 1 and 2
 
