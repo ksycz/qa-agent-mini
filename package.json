@@ -15,7 +15,8 @@
     "loop": "tsx src/loop-demo.ts",
     "agent": "tsx src/run.ts",
     "eval": "tsx src/eval.ts",
-    "trace": "tsx src/view-trace.ts"
+    "trace": "tsx src/view-trace.ts",
+    "studio": "npx --yes @langchain/langgraph-cli@1.7.2 dev"
   },
   "license": "MIT",
   "dependencies": {
