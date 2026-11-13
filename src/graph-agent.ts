@@ -20,8 +20,8 @@
 // them however the graph is built. The model, the tools, the stuck guard and the trace are shared with src/agent.ts,
 // so the only difference between the two versions is the loop. Step 21 measures whether that changes anything.
 
-import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import type { Message } from './llm';
+import { Annotation, END, MessagesAnnotation, START, StateGraph } from '@langchain/langgraph';
+import { fromLangChain, toLangChain } from './langchain-messages';
 import {
   askModel,
   finishRun,
@@ -35,38 +35,48 @@ import {
   type StopReason,
 } from './agent-steps';
 
+// A state field whose new value simply REPLACES the old one, with a starting value. The starting values mean
+// that a run can begin with only a message (this is what LangGraph Studio sends, step 20b).
+function replaced<T>(start: T) {
+  return Annotation<T>({ reducer: (_old, next) => next, default: () => start });
+}
+
 // THE STATE: what the graph carries from one node to the next.
-// `Annotation<T>()` with no reducer = the new value replaces the old one.
 const AgentState = Annotation.Root({
-  // The conversation. Its reducer ADDS: a node returns only its new messages, LangGraph puts them at the end.
-  messages: Annotation<Message[]>({ reducer: (old, added) => old.concat(added), default: () => [] }),
-  steps: Annotation<number>(), // how many times the model was asked
-  inputTokens: Annotation<number>(),
-  outputTokens: Annotation<number>(),
-  finalText: Annotation<string>(), // the text part of the model's last answer
-  turn: Annotation<ModelTurn | null>(), // the last answer of the model, handed from `model` to `tools`
-  stopReason: Annotation<StopReason | null>(), // set by a node when the run must end; null = go on
+  // The conversation, as LangChain messages (step 20b), so that LangGraph Studio can show it as a chat.
+  // Its reducer ADDS: a node returns only its new messages, LangGraph puts them at the end.
+  // The model still gets our own format: see src/langchain-messages.ts.
+  ...MessagesAnnotation.spec,
+  steps: replaced(0), // how many times the model was asked
+  inputTokens: replaced(0),
+  outputTokens: replaced(0),
+  finalText: replaced(''), // the text part of the model's last answer
+  turn: replaced<ModelTurn | null>(null), // the last answer of the model, handed from `model` to `tools`
+  stopReason: replaced<StopReason | null>(null), // set by a node when the run must end; null = go on
 });
 type State = typeof AgentState.State;
 
-// Builds the graph for one run. The things that are not data (the model client, the browser, the trace,
-// the stuck guard) are not put into the state: the nodes simply use them from `ctx`.
-function buildGraph(ctx: RunContext) {
+// Builds the graph. The things that are not data (the model client, the browser, the trace, the stuck guard)
+// are not put into the state: the nodes simply use them from `ctx`. Exported for LangGraph Studio (src/studio.ts).
+export function buildGraph(ctx: RunContext) {
   // NODE `model`: ask the model what to do next.
   const model = async (s: State): Promise<Partial<State>> => {
     const step = s.steps + 1;
-    const turn = await askModel(ctx, step, s.messages);
+    const turn = await askModel(ctx, step, fromLangChain(s.messages)); // back to our format: the model sees what the hand-written loop would send
     const update: Partial<State> = {
       steps: step,
       inputTokens: s.inputTokens + turn.usage.inputTokens,
       outputTokens: s.outputTokens + turn.usage.outputTokens,
       finalText: turn.finalText,
       turn,
+      stopReason: null, // a new question in Studio continues a finished conversation, so the old reason is cleared
     };
+    // The answer goes into the conversation (the reducer adds it at the end). Also the last one, when the model is
+    // finished: no model reads it any more, but LangGraph Studio shows the conversation, and the summary belongs in it.
+    const answer = toLangChain([{ role: 'assistant', content: turn.content }]);
     // No tool requested = the model is finished. The normal ending.
-    if (turn.done) return { ...update, stopReason: 'done' };
-    // Otherwise its answer goes into the conversation (the reducer adds it at the end).
-    return { ...update, messages: [{ role: 'assistant', content: turn.content }] };
+    if (turn.done) return { ...update, messages: answer, stopReason: 'done' };
+    return { ...update, messages: answer };
   };
 
   // NODE `tools`: run the tools the model asked for, then check the limits that are checked after the tools.
@@ -76,8 +86,8 @@ function buildGraph(ctx: RunContext) {
     if (stuck) return { stopReason: 'repeated_call' };
     const counters = { steps: s.steps, inputTokens: s.inputTokens, outputTokens: s.outputTokens, finalText: s.finalText };
     // Out of token budget: stop before the NEXT model call. The results are still added, like in src/agent.ts.
-    if (overBudget(ctx, counters)) return { messages: [message], stopReason: 'token_budget' };
-    return { messages: [message] };
+    if (overBudget(ctx, counters)) return { messages: toLangChain([message]), stopReason: 'token_budget' };
+    return { messages: toLangChain([message]) };
   };
 
   // CONDITIONAL EDGE: may the model be asked again? This is the condition of the `while` in src/agent.ts.
@@ -91,7 +101,13 @@ function buildGraph(ctx: RunContext) {
     .addConditionalEdges(START, (s: State) => (s.steps < ctx.limits.maxSteps ? 'model' : END), ['model', END])
     .addConditionalEdges('model', nextAfterModel, ['tools', END])
     .addConditionalEdges('tools', nextAfterTools, ['model', END])
-    .compile();
+    .compile()
+    // LangGraph has a safety limit of its own: by default a graph may run at most 25 nodes, then it throws an error.
+    // One step of our agent runs two nodes (`model` and `tools`), so the default would stop a run at about step 12,
+    // long before our own limit of 25 steps. We set it just above our limit: OUR step limit always ends the run
+    // first, and LangGraph's limit is only a second net that should never be reached. It is set on the graph itself,
+    // not on one call, so it also holds when LangGraph Studio runs the graph (step 20b).
+    .withConfig({ recursionLimit: 2 * ctx.limits.maxSteps + 2 });
 }
 
 // Same arguments and same result as runAgent in src/agent.ts, so a caller can switch between the two.
@@ -99,14 +115,8 @@ export async function runGraphAgent(args: AgentArgs): Promise<AgentResult> {
   const ctx = startRun(args); // final limits, the stuck guard, and the first line of the trace (shared with src/agent.ts)
   const graph = buildGraph(ctx);
 
-  const final = await graph.invoke(
-    { messages: [{ role: 'user', content: args.task }], steps: 0, inputTokens: 0, outputTokens: 0, finalText: '', turn: null, stopReason: null },
-    // LangGraph has a safety limit of its own: by default a graph may run at most 25 nodes, then it throws an error.
-    // One step of our agent runs two nodes (`model` and `tools`), so the default would stop a run at about step 12,
-    // long before our own limit of 25 steps. We set it just above our limit: OUR step limit always ends the run
-    // first, and LangGraph's limit is only a second net that should never be reached.
-    { recursionLimit: 2 * ctx.limits.maxSteps + 2 },
-  );
+  // The run starts with only the task; every other field of the state starts at its default (0, '' or null).
+  const final = await graph.invoke({ messages: toLangChain([{ role: 'user', content: args.task }]) });
 
   // The graph ended. If no node set a reason, it ended because the step limit was reached (the edge sent it to END).
   const counters = { steps: final.steps, inputTokens: final.inputTokens, outputTokens: final.outputTokens, finalText: final.finalText };

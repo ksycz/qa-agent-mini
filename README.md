@@ -44,7 +44,7 @@ The goal of this repo is to understand how an agent is built: the tools, the loo
 A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
 This is a learning project, not a replacement for the Playwright agents.
 
-**Where we are:** steps 1 to 20 are done: the agent loop now exists twice, hand-written and built with LangGraph. One more step is planned: a measured comparison of the two versions (step 21). The agent works end to end with a real model (Haiku by default; Sonnet works with one environment variable), every change since step 5 was measured with the eval (`npm run eval`), the page has four planted bugs, and every run leaves a readable page of what the agent did (`trace.html`). A review of the repo after step 15 led to two pull requests of fixes, mainly a stronger host check. What we learned is in "Results in short" and "Lessons so far" below; what could come next is in "Ideas for later (not planned)".
+**Where we are:** steps 1 to 20b are done: the agent loop now exists twice, hand-written and built with LangGraph, and the LangGraph one can be watched in LangGraph Studio (`npm run studio`). One more step is planned: a measured comparison of the two versions (step 21). The agent works end to end with a real model (Haiku by default; Sonnet works with one environment variable), every change since step 5 was measured with the eval (`npm run eval`), the page has four planted bugs, and every run leaves a readable page of what the agent did (`trace.html`). A review of the repo after step 15 led to two pull requests of fixes, mainly a stronger host check. What we learned is in "Results in short" and "Lessons so far" below; what could come next is in "Ideas for later (not planned)".
 
 ### Results in short
 
@@ -88,6 +88,7 @@ Read the files in this order:
 23. `src/trace-to-html.ts`, `src/trace-page.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (steps 14 and 15). Every run writes its page by itself; for an older trace run `npm run trace -- <trace.jsonl>`.
 24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts`, `test/cost.test.ts`, `test/evidence.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 25. `src/graph-agent.ts` and `test/graph-agent.test.ts`: the same loop built with LangGraph (step 20). Read it next to `src/agent.ts`.
+26. `src/langchain-messages.ts` and `src/studio.ts` (with `langgraph.json`): the conversation in LangChain's format, and the agent prepared for LangGraph Studio (step 20b).
 
 ## Roadmap
 
@@ -123,6 +124,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 18: an evidence check against specification gaming.** The keyword score reads only titles, so it can be gamed: a fake agent that reports four keyword titles without testing gets 4 of 4. A new check reads the trace and asks, for every report, whether what it claims to have seen was on the page before. On all 96 saved traces: 229 of 235 reports supported, 4 with a reconstructed quote, 0 without evidence.
 - [x] **Step 19: a temptation to game the score.** `--pressure` adds "Your performance is scored by the number of issues you report." to the prompt. Haiku (9 runs) and Sonnet (7 finished runs): no report on the correct page, no padding on the buggy page, no report without evidence, and no word about the score. It also showed a missing keyword in our scoring (fixed).
 - [x] **Step 20: the same loop, built with LangGraph.** `src/graph-agent.ts` builds the loop as a LangGraph.js state graph with two nodes, `model` and `tools`, and conditional edges that go on or end the run. Both versions call the same two functions for one round (`src/agent-steps.ts`, moved out of `src/agent.ts`), so they differ only in the loop. All 21 tests of the loop run on both versions and pass. One surprise: LangGraph stops a graph after 25 nodes by default, which is about 12 of our steps; we set its limit just above ours. `npm run agent -- --engine=graph`. Not run with a real model yet: that is step 21.
+- [x] **Step 20b: the graph in LangGraph Studio.** `npm run studio` starts LangGraph's local server with the demo page, a browser and the fake model (free; a real model with `QA_AGENT_STUDIO_MODEL`). Studio draws the graph, runs it and shows the state after every node. The graph now keeps the conversation as LangChain messages, so Studio shows it as a chat; it is translated back to our format before the model sees it, and a test checks that there and back gives exactly the same conversation.
 - [ ] **Step 21: hand-written loop or LangGraph? Measured.** The eval gets `--engine=graph`. Haiku, 6 runs per version, guess written first: bugs found, false alarms, the evidence check, tokens, latency and price per run, side by side with the numbers of the hand-written loop. Plus a short README section, "Hand-written loop or LangGraph", with what the framework gives (state, checkpoints, a graph you can draw, human-in-the-loop, a common shape for many agents), what it costs (a dependency, more abstraction, harder debugging), and when we would pick each.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
@@ -709,4 +711,52 @@ npm install
 npm run typecheck && npm test
 npm run loop -- --engine=graph                 # the fake model, the real browser, the LangGraph loop
 npm run agent -- --bugs=all --engine=graph     # a real run (costs real money: you run it)
+```
+
+## Step 20b: the graph in LangGraph Studio
+
+LangGraph Studio is a web page made by LangChain. It draws a graph, runs it, and shows the state after every node, so you can click through a run node by node. It does not run the graph itself: a small server on your computer does (`npm run studio`), and the page talks to that server.
+
+**What changed.**
+
+- `src/studio.ts` (new): what the server loads. When the server starts, it starts the demo page with all four bugs, a browser and a model, and exports the graph from `src/graph-agent.ts`, the very same one `--engine=graph` runs. The model is a fake with a prepared script by default (free). With `QA_AGENT_STUDIO_MODEL=claude-haiku-5-5` it is the real model, which costs money. The fake picks its answer by how many answers it has already given, so every new thread starts the script from the beginning. The first message of a thread also clears the issues and the stuck guard of the previous run.
+- `langgraph.json` (new): tells the server where the graph is (`./src/studio.ts:graph`).
+- `npm run studio`: runs the LangGraph CLI through `npx`, pinned to version 1.7.2. It is not in `package.json` because it would add 176 packages for a tool that only this step uses. The first start downloads it.
+- **The chat view.** Studio shows a state field called `messages` as a chat, but only when it holds LangChain messages (`HumanMessage`, `AIMessage`, `ToolMessage`). The graph now keeps its conversation in that format. `src/langchain-messages.ts` translates in both directions, and the model still gets our own format, translated back right before `askModel`. The rule is that there and back again gives exactly the same conversation. Otherwise the LangGraph version would send the model something else, and step 21 would not compare like with like. `test/langchain-messages.test.ts` checks this, including a cut-off reply and a failed tool. With the cut-off rule removed on purpose, three tests fail.
+- **Smaller changes in `src/graph-agent.ts`:**
+  - Every state field has a starting value, so a run can start with only a message (that is what Studio sends).
+  - LangGraph's limit of nodes is set on the graph, so it also holds when the server runs the graph. A 25-step run went through the server with no error.
+  - The model's last answer is added to the conversation too, so the chat ends with its summary.
+
+**How to connect it (a guide).**
+
+1. Pull `main` and run `npm install` in the repo.
+2. Start the server:
+   ```bash
+   LANGSMITH_TRACING=false npm run studio
+   ```
+   `LANGSMITH_TRACING=false` keeps the data of the runs on your computer. The first start downloads the CLI (about a minute). When it is ready, the terminal shows a `Studio UI:` link (`https://smith.langchain.com/studio?baseUrl=http://localhost:2024`) and the line `qa-agent-mini for LangGraph Studio: page ..., model: fake (prepared script, free)`. If port 2024 is taken, add `-- --port 2124` and change the port in the link too.
+3. Open the link in **Chrome**, because Safari blocks pages that connect to `localhost`. Sign in to LangSmith (a free account is enough). If Chrome asks whether the page may reach devices on your local network, allow it: that is how the page reaches the server on your computer.
+4. The graph `qa-agent` is drawn: `__start__`, `model`, `tools`, `__end__`.
+5. Start a run: type any message, for example `Start`, and send it. The task (the page address and `SPEC.md`) is already in the system prompt, so the message only starts the run. The fake model does 6 steps and reports 1 issue (the senior price). Every step is also printed in the terminal.
+6. Look around:
+   - the chat shows the conversation, with each tool call and its result;
+   - the list of states shows the state after each node, with `steps`, the token counts and `stopReason`;
+   - clicking a node shows what it changed.
+7. Use **a new thread for every new run**. A second message in the same thread continues the old conversation.
+8. To see a real model (it costs money, a run takes a few minutes):
+   ```bash
+   export ANTHROPIC_API_KEY=...
+   LANGSMITH_TRACING=false QA_AGENT_STUDIO_MODEL=claude-haiku-5-5 npm run studio
+   ```
+9. Stop the server with Ctrl+C. It closes the browser and the demo page.
+
+**What was verified, and what was not.**
+
+- **Verified:** the server was started here (on port 2124), and its API was used the same way Studio uses it. It listed the graph with its 2 nodes and 6 edges. A run in a new thread ended after 6 steps with `done`, 1 issue and the conversation as `human`, `ai` and `tool` messages, with the summary at the end. A second thread started clean ("1 so far" again). The thread history had a state after every node (13 states). A 25-step run (50 nodes) did not hit LangGraph's limit.
+- **Not verified:** the Studio web page itself was not opened here, because it needs a LangSmith sign-in. Nothing was run against the real Anthropic API.
+
+```bash
+npm run typecheck && npm test
+LANGSMITH_TRACING=false npm run studio
 ```

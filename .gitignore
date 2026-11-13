@@ -6,3 +6,6 @@ evals/
 # Pages made by `npm run trace` (step 14): local reading aids, not results
 trace.html
 *-trace.html
+
+# Local data of the LangGraph Studio server (`npm run studio`, step 20b)
+.langgraph_api

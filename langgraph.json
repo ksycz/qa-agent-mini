@@ -1,0 +1,7 @@
+{
+  "node_version": "22",
+  "dependencies": ["."],
+  "graphs": {
+    "qa-agent": "./src/studio.ts:graph"
+  }
+}
