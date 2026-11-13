@@ -16,7 +16,8 @@
     "agent": "tsx src/run.ts",
     "eval": "tsx src/eval.ts",
     "trace": "tsx src/view-trace.ts",
-    "studio": "npx --yes @langchain/langgraph-cli@1.7.2 dev"
+    "studio": "npx --yes @langchain/langgraph-cli@1.7.2 dev",
+    "overhead": "tsx src/overhead.ts"
   },
   "license": "MIT",
   "dependencies": {

@@ -31,6 +31,9 @@ const conversation: Message[] = [
   { role: 'assistant', content: [{ type: 'tool_use', id: 'c', name: 'snapshot', input: {} }, { type: 'text', text: 'Looking.' }] },
   // Tool results followed by the cut-off notice, in one user message.
   { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c', content: '- button "Add visitor"' }, { type: 'text', text: 'Your last reply was cut off.' }] },
+  // A reply cut off with no tool call: the next user message holds ONLY the cut-off notice (step 21 met this in a real run).
+  { role: 'assistant', content: [{ type: 'text', text: 'Last, I will check' }] },
+  { role: 'user', content: [{ type: 'text', text: 'Your last reply was cut off.' }] },
   { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
 ];
 
@@ -40,7 +43,7 @@ describe('LangChain messages', () => {
   });
 
   it('becomes the LangChain message kinds human, ai and tool', () => {
-    expect(toLangChain(conversation).map((m) => m.getType())).toEqual(['human', 'ai', 'tool', 'tool', 'ai', 'tool', 'human', 'ai']);
+    expect(toLangChain(conversation).map((m) => m.getType())).toEqual(['human', 'ai', 'tool', 'tool', 'ai', 'tool', 'human', 'ai', 'human', 'ai']);
     const ai = toLangChain(conversation)[1] as unknown as { tool_calls: { name: string }[] };
     expect(ai.tool_calls.map((c) => c.name)).toEqual(['fill', 'click']); // Studio lists the calls from here
   });
@@ -51,6 +54,7 @@ describe('LangChain messages', () => {
       toolCalls([['open_page', { url: 'http://127.0.0.1/' }], ['snapshot', {}]]),
       toolCall('open_page', { url: 'https://example.com/' }), // refused by the host check: an error result
       { ...toolCalls([['fill', { label: 'Visitor age', text: '5' }], ['click', { role: 'button' }]]), stopReason: 'max_tokens' }, // cut off
+      { ...say('Last, I will check'), stopReason: 'max_tokens' }, // cut off with no tool call at all (step 21, a real run)
       say('finished'),
     ]);
     await runAgent({ llm, tools: { browser, allowedHosts: ['127.0.0.1'], maxSnapshotChars: 100, issues: [], skills: NO_SKILLS }, system: 's', task: 't' });

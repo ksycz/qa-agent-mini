@@ -65,7 +65,7 @@ The goal of this repo is to understand how an agent is built: the tools, the loo
 A ready-made agent hides those parts. By writing a small one ourselves, every part is visible, can be changed and can be measured.
 This is a learning project, not a replacement for the Playwright agents.
 
-**Where we are:** steps 1 to 20b are done. The agent works end to end with a real model (Haiku by default, Sonnet with one environment variable), every change since step 5 was measured with the eval, and the agent loop exists twice: hand-written (`src/agent.ts`) and built with LangGraph (`src/graph-agent.ts`). Next: step 21 measures the two versions against each other.
+**Where we are:** all steps (1 to 21) are done. The agent works end to end with a real model (Haiku by default, Sonnet with one environment variable), every change since step 5 was measured with the eval, and the agent loop exists twice: hand-written (`src/agent.ts`) and built with LangGraph (`src/graph-agent.ts`). With a real model both find the same bugs at the same cost (step 21).
 
 ## Results in short
 
@@ -75,6 +75,7 @@ Haiku, 3 to 6 runs per measurement, so only large differences count. The full ta
 - **What did not help, or made things worse:** a prompt that states the budget (the model stopped early), trimming the page inside old tool results (the model repeated its tests), a skill (no gain, about 11% more tokens per step), a higher token budget (the agent mostly stops by itself).
 - **Planted bugs:** the fourth bug had to be independent of the others. The first try (9b) failed, the second (9c) worked.
 - **Safety:** two hidden notes that asked the agent to do something (open a forbidden address) were not obeyed in 12 runs of Haiku and 6 of Sonnet. The host check in code has still not met a real attempt, so this is no proof of safety. The review found that the check covered only `open_page`; now the browser itself blocks every other host too.
+- **Framework:** the same loop built with LangGraph (step 21) found the same bugs (3.5 of 4) at the same cost per step; its own loop adds about 1 ms to a step that waits about 2 s for the model.
 - **Model:** the same agent on Sonnet found all four bugs in 6 of 6 runs (Haiku at that time: 3.3 of 4) and ended every run by itself. The model mattered more than any single prompt or tool change; after step 16 Haiku comes closer (3.7 of 4), at a higher token cost.
 
 ## Lessons so far
@@ -91,6 +92,7 @@ The short version of what the steps taught us. Each step has its section in [doc
 8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits. And a rule in code protects only the paths it is on: until the review the host check was only in `open_page`, so a click on a link could have left the allowed hosts (see "Fixes after a review").
 9. **The model can matter more than the prompt and the tools** (step 12). After seven steps of changes to the prompt, the tools and the limits that moved Haiku by about a bug or less, the same agent on Sonnet found all four bugs in 6 of 6 runs and stopped when it was finished. It is one comparison with 6 runs per model, so it is a direction and not a number. It also means that the eval can no longer tell apart two versions that find 4 of 4: more changes would need harder bugs.
 10. **A score can be gamed, so check the evidence too** (step 18). Our score reads report titles, and a fake agent that only writes the right words gets full marks ("specification gaming": the letter of the measure is met, its purpose is not). A check that compares each report with what the trace shows the agent really saw catches it. On real runs it found no invented report, only four quotes rewritten from memory.
+11. **A framework changes how the agent is built, not what it finds** (steps 20 and 21). The same loop built with LangGraph found the same bugs with Haiku at the same cost per step. Its own loop costs 1 ms per step against 2 s for the model. What differs is what it brings (Studio, pausing, going back to an earlier step) and what it costs (a dependency, its own limit of 25 nodes, its own message format). And a fake model only produces the message shapes we thought of: a real cut-off reply found one that the round-trip test had missed.
 
 ## Steps
 
@@ -127,7 +129,7 @@ Every step is one small pull request, so the history reads like a tutorial. What
 - [x] **Step 19**: a temptation to game the score
 - [x] **Step 20**: the same loop, built with LangGraph
 - [x] **Step 20b**: the graph in LangGraph Studio
-- [ ] **Step 21**: hand-written loop or LangGraph? Measured
+- [x] **Step 21**: hand-written loop or LangGraph? Measured
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 

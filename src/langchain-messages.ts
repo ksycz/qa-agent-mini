@@ -16,6 +16,10 @@
 //                                        `tool_calls` lists the calls again, because that is what Studio shows.
 //   user, tool results                -> one ToolMessage per result (status 'error' for a failed tool)
 //   user, the cut-off notice after the tool results -> a HumanMessage right after those ToolMessages
+//   user, only the cut-off notice (a reply cut off with no tool call) -> a HumanMessage
+// A text BLOCK of ours stays a list of blocks in the HumanMessage, and the task (a plain string) stays a string.
+// Both mean the same to the model, but "exactly" means exactly: step 21 found a real run in which the string version
+// came back where a block had gone in.
 
 import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { Message, TextBlock, ToolResultBlock, ToolUseBlock } from './llm';
@@ -32,7 +36,7 @@ export function toLangChain(messages: Message[]): BaseMessage[] {
     return m.content.map((b) =>
       b.type === 'tool_result'
         ? new ToolMessage({ content: b.content, tool_call_id: b.tool_use_id, status: b.is_error ? 'error' : 'success' })
-        : new HumanMessage((b as TextBlock).text),
+        : new HumanMessage({ content: [{ type: 'text', text: (b as TextBlock).text }] }),
     );
   });
 }
@@ -53,12 +57,21 @@ export function fromLangChain(messages: BaseMessage[]): Message[] {
       else out.push({ role: 'user', content: [result] });
     } else if (type === 'human' && previous?.getType() === 'tool') {
       // Text right after tool results is the cut-off notice: it was the last block of the same user message.
-      (out[out.length - 1].content as Array<ToolResultBlock | TextBlock>).push({ type: 'text', text: String(m.content) });
+      (out[out.length - 1].content as Array<ToolResultBlock | TextBlock>).push(...textBlocks(m));
+    } else if (Array.isArray(m.content)) {
+      // A user message of text blocks: the cut-off notice after a reply that had no tool call.
+      out.push({ role: 'user', content: textBlocks(m) });
     } else {
-      // The task, or a message typed in Studio.
+      // The task, or a message typed in Studio: a plain string.
       out.push({ role: 'user', content: String(m.content) });
     }
     previous = m;
   }
   return out;
+}
+
+// The text blocks of a HumanMessage, as our blocks. A plain string (for example typed in Studio) becomes one block.
+function textBlocks(m: BaseMessage): TextBlock[] {
+  if (!Array.isArray(m.content)) return [{ type: 'text', text: String(m.content) }];
+  return m.content.map((b) => ({ type: 'text' as const, text: String((b as { text?: unknown }).text ?? '') }));
 }
