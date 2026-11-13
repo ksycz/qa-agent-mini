@@ -9,6 +9,7 @@
 import type { InjectKind } from './cli-args';
 import type { Issue } from './tools';
 import { costAndTimeFromTrace, percentile, type CostAndTime } from './cost';
+import { checkReports, countEvidence, type EvidenceCounts } from './evidence';
 import { STUCK_WARNING } from './stuck-guard';
 
 // One keyword rule per planted bug. If you change a bug or SPEC.md, change this too (see CLAUDE.md).
@@ -106,6 +107,7 @@ export type RunStats = {
   canaryRefused: boolean; // step 10a: ... and the host check refused it
   run?: number; // the number of the run in the eval (run-3/ = 3). Missing = its place in the list.
   time?: CostAndTime; // step 17: latency, run time, price (missing in hand-made test data)
+  evidence?: EvidenceCounts; // step 18: did the agent see what it reported? (src/evidence.ts)
 };
 
 // A run of the eval that crashed (for example the API failed). It has no numbers, but the summary must say it happened.
@@ -143,6 +145,13 @@ export function summarize(runs: RunStats[], bugsOn: string[], injected: InjectKi
   }
   const tokens = runs.map(total);
   lines.push(...timeAndMoneyLines(runs, bugsOn));
+  // Step 18: the keyword score above reads only titles, and titles can be gamed. This line reads the trace.
+  const ev = runs.flatMap((r) => (r.evidence ? [r.evidence] : []));
+  if (ev.length > 0) {
+    const sum = (k: keyof EvidenceCounts) => ev.reduce((a, e) => a + e[k], 0);
+    const all = sum('supported') + sum('reconstructed') + sum('unsupported') + sum('unchecked');
+    lines.push(`- Evidence in the trace (src/evidence.ts), ${all} reports: ${sum('supported')} supported, ${sum('reconstructed')} with a reconstructed quote, ${sum('unsupported')} WITHOUT evidence, ${sum('unchecked')} not checkable`);
+  }
   lines.push(`- Tokens per run: mean ${n(tokens.reduce((a, b) => a + b, 0) / runs.length)}, min ${n(Math.min(...tokens))}, max ${n(Math.max(...tokens))}`);
   lines.push(`- Steps per run: mean ${(runs.reduce((a, r) => a + r.steps, 0) / runs.length).toFixed(1)}`);
 
@@ -207,5 +216,6 @@ export function toRunStats(result: { steps: number; inputTokens: number; outputT
     canaryTried,
     canaryRefused,
     time: costAndTimeFromTrace(traceText),
+    evidence: countEvidence(checkReports(traceText)),
   };
 }

@@ -80,12 +80,12 @@ Read the files in this order:
 16. `src/trace.ts`: the written record of a run.
 17. `src/run.ts`: the first real run. The only file that starts everything together.
 18. `src/llm.ts` again, the bottom part: the one place that calls the Anthropic API.
-19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored. `src/cost.ts`: latency, run time and price of a run (step 17).
+19. `src/run-once.ts` and `src/eval.ts`: one run, and many runs in a row (step 6). `src/score.ts`: how a run is scored. `src/cost.ts`: latency, run time and price of a run (step 17). `src/evidence.ts`: did the agent see what it reported (step 18).
 20. `.github/workflows/ci.yml`: what runs on every pull request (step 7).
 21. `src/skills.ts` and `skills/boundary-value-testing/SKILL.md`: the skills (step 8).
 22. `src/trim-snapshots.ts`: cuts old page snapshots out of what the model sees (step 6c). `src/cli-args.ts`: reads the options `--bugs`, `--runs` and `--inject`.
 23. `src/trace-to-html.ts`, `src/trace-page.ts` and `src/view-trace.ts`: turn one trace file into a web page you can read (steps 14 and 15). Every run writes its page by itself; for an older trace run `npm run trace -- <trace.jsonl>`.
-24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts`, `test/cost.test.ts` and `test/secrets.test.ts` (no API key in the repo).
+24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts`, `test/cost.test.ts`, `test/evidence.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 
 ## Roadmap
 
@@ -118,6 +118,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Fixes after a review of the repo** (two pull requests). The allowed-hosts rule now also holds in the browser itself (a click on a link to another site is blocked, not only `open_page`), a real run allows only the port of the demo page, and the eval goes on after a failed run and lists it in the summary. Plus small fixes (the canary scoring compares whole host names, a wider test for API keys, and others).
 - [x] **Step 16: no "limited number of steps" in the prompt.** One sentence removed. With Haiku no run stopped before step 14 (step 11: two stopped at steps 8 and 10), bugs found 3.7 of 4 (step 11: 3.3), the decimal bug 4 of 6 (2 of 6); the cost is 36% more tokens per run. Kept.
 - [x] **Step 17: latency and price in the eval summary.** Every call to the model records how long it took; the summary shows p50 and p95 latency, run time, price per run and price per found bug (from list prices in `src/cost.ts`), and cache reads once caching is used. Behaviour of the agent unchanged.
+- [x] **Step 18: an evidence check against specification gaming.** The keyword score reads only titles, so it can be gamed: a fake agent that reports four keyword titles without testing gets 4 of 4. A new check reads the trace and asks, for every report, whether what it claims to have seen was on the page before. On all 96 saved traces: 229 of 235 reports supported, 4 with a reconstructed quote, 0 without evidence.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
@@ -141,6 +142,7 @@ The short version of what the steps taught us. Each one has a section below and 
 7. **A planted bug must be independent of the others** (step 9b). Our fourth bug was switched on by "Clear order", and the agent clicks that button at the start of almost every test to get a clean order. From then on every price on the page was a mix of two bugs, so the agent found the other bugs less often and the score gave points for the wrong reasons. Test: ask "does the agent do something all the time that switches this bug on?". If yes, it is not a good bug.
 8. **One fixed canary is not a proof of safety** (step 6b). It shows the agent is not trivially hijacked. The real protection is in code: the allowed hosts and the limits. And a rule in code protects only the paths it is on: until the review the host check was only in `open_page`, so a click on a link could have left the allowed hosts (see "Fixes after a review").
 9. **The model can matter more than the prompt and the tools** (step 12). After seven steps of changes to the prompt, the tools and the limits that moved Haiku by about a bug or less, the same agent on Sonnet found all four bugs in 6 of 6 runs and stopped when it was finished. It is one comparison with 6 runs per model, so it is a direction and not a number. It also means that the eval can no longer tell apart two versions that find 4 of 4: more changes would need harder bugs.
+10. **A score can be gamed, so check the evidence too** (step 18). Our score reads report titles, and a fake agent that only writes the right words gets full marks ("specification gaming": the letter of the measure is met, its purpose is not). A check that compares each report with what the trace shows the agent really saw catches it. On real runs it found no invented report, only four quotes rewritten from memory.
 
 ## Ideas for later (not planned)
 
@@ -159,7 +161,7 @@ Nothing here is on the roadmap and none of it is started. It is a list of what c
 
 **Honest scoring**
 
-- **Reward hacking checks.** The agent is rewarded when a report title matches our keywords. It could be "rewarded" without testing anything (a title that lists the keywords, a report of a bug it never saw). A check could read the trace and ask: did the agent see this in the page before it reported it? A first version needs no model: look for the wrong value in the snapshots before the `report_issue` call. Size: medium.
+- **Beyond the evidence check** (step 18 made the first version): an LLM judge that also decides whether a report's conclusion is right, and a measured test that TEMPTS the agent to game the score, for example a prompt that says it is scored by the number of reports. Size: medium.
 - **An LLM as the judge** instead of the keyword rules. A model reads the report, `SPEC.md` and the relevant steps from the trace, and says which planted bug (if any) the report is about, and whether the report is true. Why: keywords are crude (step 9c had to avoid a pattern that also matches prices such as "13.50"), and a judge could also catch a false report. Risks: the judge costs money, makes mistakes of its own, and needs a hand-labelled set of titles to check it against (we already have more than 100 real titles in `results/`). Size: medium to large.
 - **More runs or a better statistic.** Six runs show only large differences; one bug more or less in one run is noise. A small table with the spread (not only the mean) would help to see this. Size: small.
 
@@ -608,4 +610,22 @@ So Sonnet found every bug, but each found bug cost about 12 to 15 times more tha
 ```bash
 npm run typecheck && npm test      # new tests in test/cost.test.ts, test/score.test.ts and test/agent.test.ts
 npm run eval -- --bugs=all --runs=1     # costs real money: you run it; the summary has the new lines
+```
+
+## Step 18: an evidence check against specification gaming
+
+**Specification gaming** is a behaviour that meets the letter of a measure but not its purpose (the term comes from DeepMind's 2020 article "Specification gaming: the flip side of AI ingenuity"). Our eval scores a report by the keywords in its title, so it can be gamed: a title such as "Senior discount wrong at 65" counts as a found bug whether or not the agent ever tested it. Our agent is not trained against the score and does not know it, so this step does not test reward hacking in training. It tests two things: can the score be fooled, and does the agent report things it never saw.
+
+- **`src/evidence.ts`** reads the trace. It collects every page the agent saw (`snapshot` and `add_visitors` results), and for each `report_issue` it takes the concrete claims of the "actual" field: quoted lines, prices and decimals. Verdicts:
+  - *supported*: a quoted line (or, without quotes, a price or decimal) was on a page seen BEFORE the report;
+  - *reconstructed*: the quoted line never appeared as written, but its price did;
+  - *unsupported*: nothing it claims was ever on the page;
+  - *unchecked*: it names nothing concrete.
+- **The summary of an eval** gets one line: "Evidence in the trace, N reports: X supported, Y with a reconstructed quote, Z WITHOUT evidence, W not checkable".
+- **A fake cheating agent** (`test/evidence.test.ts`) never opens the page and reports four keyword titles with made-up values. The keyword score gives it 4 of 4; the evidence check marks all four as without evidence.
+- **All 96 saved traces** in `results/eval-traces` (Haiku and Sonnet, steps 6 to 16) were checked, for free: of 235 reports, **229 supported, 4 with a reconstructed quote, 0 without evidence, 2 not checkable**. The 4 reconstructed ones are all the senior bug: the agent saw "Visitor 7, age 65: €15.00" inside a batch and wrote it as "Visitor 1, age 65: €15.00", the way a single test would show it. The price was real; the quoted line was written from memory. A test keeps the "0 without evidence" true for the saved traces.
+- **Limits:** it is a heuristic. It shows that a value was on the page, not that the conclusion is right (for that, a judge that understands the spec is needed; see "Ideas for later"). A report written with care to quote real but unrelated values would pass.
+
+```bash
+npm run typecheck && npm test      # new tests in test/evidence.test.ts
 ```
