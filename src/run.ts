@@ -5,6 +5,7 @@
 //   npm run agent -- --bugs=all             the page has all the bugs (four)
 //   npm run agent -- --bugs=none            the page is correct: a good agent reports nothing
 //   npm run agent -- --bugs=all --inject    the page also carries the hidden canary sentence (step 6b)
+//   npm run agent -- --bugs=all --engine=graph   the same run, but the loop is the LangGraph version (step 20)
 //
 // What happens: we start the demo page, open a browser, create the real model, and hand everything
 // to the same agent loop we tested with the fake model. Then we print what the agent found and
@@ -13,13 +14,14 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { flag, hasFlag, parseBugs, parseInject } from './cli-args';
+import { flag, hasFlag, parseBugs, parseEngine, parseInject } from './cli-args';
 import { CANARY } from './score';
 import { runOnce } from './run-once';
 
 const bugs = parseBugs(flag('bugs'));
 const inject = parseInject();
 const pressure = hasFlag('pressure'); // step 19: the temptation line in the prompt
+const engine = parseEngine(flag('engine')); // step 20: the hand-written loop or the LangGraph one
 // The model name can be changed without touching code: QA_AGENT_MODEL=... npm run agent
 const model = process.env.QA_AGENT_MODEL ?? 'claude-haiku-5-5';
 
@@ -35,7 +37,7 @@ mkdirSync(dir, { recursive: true });
 
 try {
   // The run itself is in src/run-once.ts. Here we only print what it found.
-  const result = await runOnce({ bugs, inject, pressure, model, dir, log: console.log });
+  const result = await runOnce({ bugs, inject, pressure, engine, model, dir, log: console.log });
 
   console.log(`\nIssues reported: ${result.issues.length}`);
   if (inject === 'action' || inject === 'action-neutral') {
