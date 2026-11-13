@@ -6,11 +6,11 @@ description: Use when working on the qa-agent-mini repo: starting, building, tes
 # Working on qa-agent-mini, one roadmap step at a time
 
 qa-agent-mini is a tiny QA agent built step by step so its owner learns how agents are made.
-The steps are listed in the Roadmap section of README.md. Follow this procedure for every step.
+The steps are listed in the Roadmap at the top of docs/STEPS.md. Follow this procedure for every step.
 
 ## Before you start
 
-1. Read CLAUDE.md and the Roadmap in README.md. Find the next unchecked step. Build only that step.
+1. Read CLAUDE.md and the Roadmap in docs/STEPS.md. Find the next unchecked step. Build only that step.
 2. If the previous step's pull request is not merged yet, branch from its branch and open the new PR against that branch. Say so at the top of the PR description.
 3. Tell the owner in one or two sentences what this step adds and why it comes now.
 
@@ -23,7 +23,7 @@ The steps are listed in the Roadmap section of README.md. Follow this procedure 
 - Safety rules (allowed hosts, step and token limits) live in code, not only in the prompt.
 - Keep SPEC.md, the planted bugs and the tests consistent. Change one, change all.
 - In target/index.html, never write the placeholder name of the bug list inside a comment: the server replaces only its first occurrence.
-- Add a short section for the step to README.md, tick the step in the Roadmap, and add the new files to the reading order in "How to read this repo".
+- Add a short section for the step at the end of docs/STEPS.md and tick the step in its Roadmap. In README.md, tick the step in the list under "Steps" and update "Where we are"; touch "Results in short" and "Lessons so far" only when the step changes them. Add the new files to docs/HOW-TO-READ.md. Keep README.md short.
 
 ## Before you say it is done
 

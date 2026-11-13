@@ -43,7 +43,7 @@ function replaced<T>(start: T) {
 
 // THE STATE: what the graph carries from one node to the next.
 const AgentState = Annotation.Root({
-  // The conversation, as LangChain messages (step 20b), so that LangGraph Studio can show it as a chat.
+  // The conversation, as LangChain messages (step 20b): the format LangGraph's tools, Studio among them, expect.
   // Its reducer ADDS: a node returns only its new messages, LangGraph puts them at the end.
   // The model still gets our own format: see src/langchain-messages.ts.
   ...MessagesAnnotation.spec,

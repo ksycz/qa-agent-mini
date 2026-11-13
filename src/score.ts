@@ -3,7 +3,7 @@
 //
 // The question the eval answers: "of the planted bugs, how many did the agent report, and did it report things that are not bugs?"
 // "Found" means: the agent reported it with report_issue. Only the TITLE of the report is read, with simple keywords.
-// Keywords are crude (an LLM judge instead is in "Ideas for later" in the README), so the summary also prints every title:
+// Keywords are crude (an LLM judge instead is in "Ideas for later" in docs/IDEAS.md), so the summary also prints every title:
 // look at them yourself when a number surprises you.
 
 import type { InjectKind } from './cli-args';
