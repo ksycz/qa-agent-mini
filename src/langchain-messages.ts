@@ -4,7 +4,7 @@
 // tools (LangGraph Studio among them) expect it there as LangChain messages in a field called `messages`. So the graph
 // stores LangChain messages, and translates them back to our format right before the model is asked (askModel).
 // (Studio's Chat mode still does not offer itself for this graph, nor for the plain example from the LangGraph docs:
-// see the README, step 20b. Its Graph mode shows the messages in the state of every node.)
+// see docs/STEPS.md, step 20b. Its Graph mode shows the messages in the state of every node.)
 //
 // The rule that matters: there and back again must give EXACTLY what went in. Otherwise the model would see a
 // different conversation in the LangGraph version, and the comparison in step 21 would not be fair.
