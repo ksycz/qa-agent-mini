@@ -71,6 +71,7 @@ One row per change, in the order we made them. The sections below keep the whole
 - [Step 19: a temptation to game the score, the plan (written before the runs)](#step-19-a-temptation-to-game-the-score-the-plan-written-before-the-runs)
 - [Step 19: a temptation to game the score, the result for Haiku](#step-19-a-temptation-to-game-the-score-the-result-for-haiku)
 - [Step 19: a temptation to game the score, the result for Sonnet](#step-19-a-temptation-to-game-the-score-the-result-for-sonnet)
+- [Step 21: hand-written loop or LangGraph, the plan (written before the runs)](#step-21-hand-written-loop-or-langgraph-the-plan-written-before-the-runs)
 - [Summary of runs 1 and 2](#summary-of-runs-1-and-2)
 - [Summary of run 3 (correct page)](#summary-of-run-3-correct-page)
 - [Run 1: the baseline](#run-1-the-baseline)
@@ -1354,6 +1355,42 @@ Runs: the same two commands with `QA_AGENT_MODEL=claude-sonnet-5-5`. Every trace
 7. *Bugs found 4 of 4 in nearly every run:* **true** (4 of 4 in all 4 finished runs, after the scoring correction).
 
 **What we learn from step 19.** One sentence that tells the agent it is scored by the number of reports did not make Haiku or Sonnet invent findings, pad the count or report on a correct page, in 9 Haiku runs and 7 Sonnet runs. Both ignored it without comment, the same way they ignored the canary notes. It is one sentence and few runs, so it shows that this temptation does not work, not that none would. The measurement also caught a weak spot in our own scoring (a missing keyword), which is another argument for the LLM judge in "Ideas for later".
+
+## Step 21: hand-written loop or LangGraph, the plan (written before the runs)
+
+**Why:** step 20 built the agent loop a second time with LangGraph (`src/graph-agent.ts`), and step 20b keeps its conversation as LangChain messages. Every unit test runs on both versions and passes, and a test checks that the model is sent exactly the same conversation. Those are tests with a fake model. This step asks whether the two versions also behave the same with a real model, and what LangGraph costs in time.
+
+**The change:** `npm run eval` gets `--engine=graph`. Without it, the hand-written loop runs as before. The first line of `summary.md` names the model and the loop, and every trace records `engine` in its first line.
+
+**Measured already, for free (`npm run overhead`):** 200 runs of each loop with a fake model and a fake browser that answer at once, 25 steps per run, two tool calls per step. Only the loop itself is measured.
+
+| | Hand-written loop | LangGraph |
+|---|---|---|
+| Time per run (25 steps), mean | 2.2 ms | 24.9 to 28.7 ms |
+| Time per step | 0.09 ms | 1.0 to 1.1 ms |
+
+Two runs of the script, the range shows both. LangGraph's loop is about 11 times slower: it copies the state, merges it with reducers, and translates the conversation to LangChain messages and back in every step. But it adds only about 1 ms to a step in which the model takes about 1,900 ms (the p50 latency in step 19). That is 0.05 % of a step.
+
+**How we measure:** Haiku, the buggy page, no canary and no pressure, the two evals right after each other on the same day, so a change on the side of the model cannot look like a difference between the loops:
+- `npm run eval -- --bugs=all --runs=6` (the hand-written loop, a new baseline for today)
+- `npm run eval -- --bugs=all --runs=6 --engine=graph`
+- `npm run eval -- --bugs=none --runs=3 --engine=graph` (the correct page: any report is a false alarm)
+
+What we compare: bugs found, false alarms, reports and repeats, the evidence line, steps, tokens, why the runs stopped, model latency, run time, price, and any error that only one version has.
+
+**The last baselines** (Haiku, buggy page): step 16, the last eval without pressure: 3.7 of 4 bugs, 0 false alarms, 110,846 tokens per run. Latency and run time are in the summary only since step 17, so they come from step 19 (with pressure, which changed little else): about 17 steps, about 37 s per run, model latency p50 1.9 s, p95 3.7 s. The first eval of this step gives a fresh baseline anyway.
+
+Cost, by the list prices of step 17 (about $0.013 per run): about $0.20 for all three evals (15 runs).
+
+**Guesses (written before measuring):**
+
+1. **The bugs found and the false alarms are the same within the noise of 6 runs:** 3.5 to 4 of 4 for both versions, 0 false alarms, also 0 on the correct page. The model is sent the same conversation, so only its own randomness can differ.
+2. **Tokens and steps per run differ by less than 15 %** between the two versions, in either direction. Six runs of Haiku already vary by about 30 % (91,780 to 124,696 tokens in step 19).
+3. **Model latency (p50, p95) is the same**, and the run time differs by less than 10 %. The free measurement above says the loop adds about 25 ms to a run of 37 s.
+4. **No error that only LangGraph has:** no `GraphRecursionError`, no failed run, no reply that the translation of messages breaks. If one shows up, it counts more than all the numbers above.
+5. **Evidence:** 0 reports without evidence in both versions.
+
+**What this will not show:** a difference smaller than the noise of 6 runs. "The same" here means "no difference we can see", not "proven identical". The free measurement shows the cost of the loop; the evals show whether a real model notices any difference.
 
 ## Summary of runs 1 and 2
 

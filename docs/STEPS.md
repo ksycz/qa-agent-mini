@@ -618,3 +618,44 @@ LangGraph Studio is a web page made by LangChain. It draws a graph, runs it, and
 npm run typecheck && npm test
 LANGSMITH_TRACING=false npm run studio
 ```
+
+## Step 21: hand-written loop or LangGraph? Measured
+
+Steps 20 and 20b built the agent loop a second time with LangGraph. The unit tests prove that both versions behave the same with a fake model. This step measures them with a real model, and writes down when we would pick which.
+
+**What changed.**
+
+- `npm run eval -- --engine=graph` runs the eval with the LangGraph loop (the default is still the hand-written one). The first line of `summary.md` names the model and the loop.
+- `npm run overhead` (new, free): both loops run the same 25-step script of a fake model and a fake browser 200 times. Only the loop itself is measured.
+
+**The cost of the loop itself (free, measured).** The hand-written loop needs about 0.09 ms per step, LangGraph about 1 ms: it copies the state, merges it with reducers and translates the conversation to LangChain messages and back. That is about 11 times slower, but a call to the model takes about 1,900 ms, so LangGraph adds about 0.05 % to a step.
+
+**The measurement with a real model.** Plan and guesses: [RESULTS.md](../RESULTS.md#step-21-hand-written-loop-or-langgraph-the-plan-written-before-the-runs). The result follows here once the evals have run.
+
+```bash
+npm run overhead                                   # free
+npm run eval -- --bugs=all --runs=6                # costs real money: you run it
+npm run eval -- --bugs=all --runs=6 --engine=graph
+npm run eval -- --bugs=none --runs=3 --engine=graph
+```
+
+### Hand-written loop or LangGraph
+
+What building the same agent twice showed us:
+
+| | Hand-written loop (`src/agent.ts`) | LangGraph (`src/graph-agent.ts`) |
+|---|---|---|
+| Size, around the shared parts (`src/agent-steps.ts`) | `src/agent.ts`: 59 lines, 22 of them code | `src/graph-agent.ts` and `src/langchain-messages.ts`: 194 lines, 110 of them code, plus 22 packages (about 29 MB) |
+| Reading it | a `while` with `if ... return`: every rule is in one place | nodes, edges, reducers, and the edges hold the rules for going on |
+| Limits | in our code | in our code, **and** LangGraph's own limit of 25 nodes, which silently cut a run at about step 12 until we raised it |
+| Seeing a run | our trace and `trace.html` (steps 14 and 15) | LangGraph Studio: the graph, the state after every node, a run that can be paused |
+| Pause and approve (human-in-the-loop) | would have to be built | built in (`Interrupts` in Studio, `interrupt` in code) |
+| Go back to an earlier step (fork) | would have to be built | built in. But it rewinds only the state of the graph: the browser kept what the first run did |
+| Conversation format | our own, the one the Anthropic API uses | LangChain messages, translated both ways (step 20b). Studio's Chat mode still did not accept them |
+| Cost per step | about 0.09 ms | about 1 ms (both tiny next to a model call of about 2 s) |
+
+**When we would pick which:**
+
+- **Hand-written** for a small agent with one loop and a few tools, like this one: every part is visible, there is nothing to learn first, and nothing happens that we did not write.
+- **LangGraph** when the agent needs what it brings ready-made: pausing for a person to approve an action, resuming a long run after a crash (with a checkpointer), several agents or branches in one graph, or a team that already shares one shape for all its agents. Then the price (a dependency, its own limits and formats) buys real work.
+- **Either way**, the limits and the safety checks stay in our own code, and the tests run against the agent, not against the framework.

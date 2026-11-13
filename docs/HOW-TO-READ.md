@@ -31,3 +31,4 @@ Read the files in this order:
 24. The other tests: `test/llm.test.ts` (turning the API's answer into our blocks), `test/prompt.test.ts` (the prompts and the options), `test/trim-snapshots.test.ts`, `test/score.test.ts`, `test/skills.test.ts`, `test/trace-to-html.test.ts`, `test/trace-page.test.ts`, `test/cost.test.ts`, `test/evidence.test.ts` and `test/secrets.test.ts` (no API key in the repo).
 25. `src/graph-agent.ts` and `test/graph-agent.test.ts`: the same loop built with LangGraph (step 20). Read it next to `src/agent.ts`.
 26. `src/langchain-messages.ts` and `src/studio.ts` (with `langgraph.json`): the conversation in LangChain's format, and the agent prepared for LangGraph Studio (step 20b).
+27. `src/overhead.ts`: how much time the loop itself costs, hand-written and LangGraph (step 21). Run it with `npm run overhead`.
