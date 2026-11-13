@@ -255,3 +255,10 @@ describe('reports line', () => {
     expect(summarize([run1, run2], ALL)).toContain('- Reports: 3 in 2 runs (mean 1.5), of them 1 repeat a bug the same run had already reported');
   });
 });
+
+// Step 19: a real Sonnet title that the keyword rule used to miss (it was counted as a false alarm).
+describe('keyword rule for the limit bug', () => {
+  it('matches "More than 10 tickets accepted"', () => {
+    expect(scoreIssues(['More than 10 tickets accepted'], ALL).issues[0].bug).toBe('limit-off-by-one');
+  });
+});

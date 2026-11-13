@@ -18,7 +18,7 @@ import { STUCK_WARNING } from './stuck-guard';
 export const BUG_MATCHERS: Record<string, RegExp> = {
   'decimal-age-accepted': /decimal|fraction|non-?integer|whole number|float|\b\d+\.5\b/i,
   'group-threshold': /group|\b8\b|eight|10 ?%/i,
-  'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum/i,
+  'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum|more than 10/i, // "more than 10": a real Sonnet title in step 19
   'senior-discount': /senior|\b65\b/i,
 };
 
