@@ -39,7 +39,7 @@ describe('LangChain messages', () => {
     expect(fromLangChain(toLangChain(conversation))).toEqual(conversation);
   });
 
-  it('becomes the message kinds Studio shows as a chat', () => {
+  it('becomes the LangChain message kinds human, ai and tool', () => {
     expect(toLangChain(conversation).map((m) => m.getType())).toEqual(['human', 'ai', 'tool', 'tool', 'ai', 'tool', 'human', 'ai']);
     const ai = toLangChain(conversation)[1] as unknown as { tool_calls: { name: string }[] };
     expect(ai.tool_calls.map((c) => c.name)).toEqual(['fill', 'click']); // Studio lists the calls from here

@@ -715,6 +715,10 @@ npm run agent -- --bugs=all --engine=graph     # a real run (costs real money: y
 
 ## Step 20b: the graph in LangGraph Studio
 
+![LangGraph Studio after a run of the fake model: the graph on the left; on the right the state after each node of the last steps: model (steps 5, tokens, stopReason null), tools ("Issue recorded (1 so far)"), and the last model with its summary and stopReason done](docs/studio-run.png)
+
+*The end of a run in LangGraph Studio (Graph mode, fake model). Left: the graph. Right: the state after every node, newest at the bottom. Step 5 (`model`, then `tools`) reports the issue. In step 6 the model asks for no tool, so `finalText` holds its summary, `stopReason` becomes `done` and the edge goes to `__end__`. The `Input` box at the bottom left is where a run is started (here with an empty input, `{}`).*
+
 LangGraph Studio is a web page made by LangChain. It draws a graph, runs it, and shows the state after every node, so you can click through a run node by node. It does not run the graph itself: a small server on your computer does (`npm run studio`), and the page talks to that server.
 
 **What changed.**
@@ -722,7 +726,7 @@ LangGraph Studio is a web page made by LangChain. It draws a graph, runs it, and
 - `src/studio.ts` (new): what the server loads. When the server starts, it starts the demo page with all four bugs, a browser and a model, and exports the graph from `src/graph-agent.ts`, the very same one `--engine=graph` runs. The model is a fake with a prepared script by default (free). With `QA_AGENT_STUDIO_MODEL=claude-haiku-5-5` it is the real model, which costs money. The fake picks its answer by how many answers it has already given, so every new thread starts the script from the beginning. The first message of a thread also clears the issues and the stuck guard of the previous run.
 - `langgraph.json` (new): tells the server where the graph is (`./src/studio.ts:graph`).
 - `npm run studio`: runs the LangGraph CLI through `npx`, pinned to version 1.7.2. It is not in `package.json` because it would add 176 packages for a tool that only this step uses. The first start downloads it.
-- **The chat view.** Studio shows a state field called `messages` as a chat, but only when it holds LangChain messages (`HumanMessage`, `AIMessage`, `ToolMessage`). The graph now keeps its conversation in that format. `src/langchain-messages.ts` translates in both directions, and the model still gets our own format, translated back right before `askModel`. The rule is that there and back again gives exactly the same conversation. Otherwise the LangGraph version would send the model something else, and step 21 would not compare like with like. `test/langchain-messages.test.ts` checks this, including a cut-off reply and a failed tool. With the cut-off rule removed on purpose, three tests fail.
+- **The conversation as LangChain messages.** Studio and other LangGraph tools expect the conversation in a state field called `messages`, holding LangChain messages (`HumanMessage`, `AIMessage`, `ToolMessage`). The graph now keeps its conversation in that format. `src/langchain-messages.ts` translates in both directions, and the model still gets our own format, translated back right before `askModel`. The rule is that there and back again gives exactly the same conversation. Otherwise the LangGraph version would send the model something else, and step 21 would not compare like with like. `test/langchain-messages.test.ts` checks this, including a cut-off reply and a failed tool. With the cut-off rule removed on purpose, three tests fail.
 - **Smaller changes in `src/graph-agent.ts`:**
   - Every state field has a starting value, so a run can start with only a message (that is what Studio sends).
   - LangGraph's limit of nodes is set on the graph, so it also holds when the server runs the graph. A 25-step run went through the server with no error.
@@ -736,25 +740,27 @@ LangGraph Studio is a web page made by LangChain. It draws a graph, runs it, and
    LANGSMITH_TRACING=false npm run studio
    ```
    `LANGSMITH_TRACING=false` keeps the data of the runs on your computer. The first start downloads the CLI (about a minute). When it is ready, the terminal shows a `Studio UI:` link (`https://smith.langchain.com/studio?baseUrl=http://localhost:2024`) and the line `qa-agent-mini for LangGraph Studio: page ..., model: fake (prepared script, free)`. If port 2024 is taken, add `-- --port 2124` and change the port in the link too.
-3. Open the link in **Chrome**, because Safari blocks pages that connect to `localhost`. Sign in to LangSmith (a free account is enough). If Chrome asks whether the page may reach devices on your local network, allow it: that is how the page reaches the server on your computer.
+3. Open the link in **Chrome**, because Safari blocks pages that connect to `localhost`. Sign in to LangSmith (a free account is enough). Studio may say that `LANGSMITH_API_KEY` is missing: that only means the runs are not sent to LangSmith (we turned that off). The graph and its state work without it. To send the runs to LangSmith as well, create a key on https://smith.langchain.com/settings (API Keys) and start the server with `LANGSMITH_API_KEY=lsv2_... LANGSMITH_TRACING=true npm run studio`. If Chrome asks whether the page may reach devices on your local network, allow it: that is how the page reaches the server on your computer.
 4. The graph `qa-agent` is drawn: `__start__`, `model`, `tools`, `__end__`.
-5. Start a run: type any message, for example `Start`, and send it. The task (the page address and `SPEC.md`) is already in the system prompt, so the message only starts the run. The fake model does 6 steps and reports 1 issue (the senior price). Every step is also printed in the terminal.
-6. Look around:
-   - the chat shows the conversation, with each tool call and its result;
-   - the list of states shows the state after each node, with `steps`, the token counts and `stopReason`;
-   - clicking a node shows what it changed.
-7. Use **a new thread for every new run**. A second message in the same thread continues the old conversation.
-8. To see a real model (it costs money, a run takes a few minutes):
+5. Stay in **Graph** mode. The **Chat** mode stays greyed out ("Chat needs a graph whose state has a messages list"), even though the state has one. The local server describes the message type in a way Studio does not recognise. We saw the same description for the plain `MessagesAnnotation` example from the LangGraph docs, so it is not caused by this repo. Everything below works in Graph mode.
+6. Start a run: click **Submit** under the `Input` box. An empty input (`{}`) is enough, because the task (the page address and `SPEC.md`) is already in the system prompt and every field of the state has a starting value. To send a message anyway, switch the box to raw input (**View Raw**) and enter `{"messages": [{"role": "user", "content": "Start"}]}`. The fake model does 6 steps and reports 1 issue (the senior price). Every step is also printed in the terminal.
+7. Look around in the right-hand panel (see the picture above):
+   - every node of the run is listed with the state it changed: `steps`, the token counts, `messages`, `turn` and `stopReason`;
+   - open `messages` to see the conversation, with each tool call and its result;
+   - **Interrupts** (above the graph) pauses a run before or after a node, for example before `tools`, so you see what the model wants to do before it is done.
+8. Use **a new thread for every new run** (the **+** next to the thread name, top right). A second message in the same thread continues the old conversation.
+9. To see a real model (it costs money, a run takes a few minutes):
    ```bash
    export ANTHROPIC_API_KEY=...
    LANGSMITH_TRACING=false QA_AGENT_STUDIO_MODEL=claude-haiku-5-5 npm run studio
    ```
-9. Stop the server with Ctrl+C. It closes the browser and the demo page.
+10. Stop the server with Ctrl+C. It closes the browser and the demo page.
 
 **What was verified, and what was not.**
 
 - **Verified:** the server was started here (on port 2124), and its API was used the same way Studio uses it. It listed the graph with its 2 nodes and 6 edges. A run in a new thread ended after 6 steps with `done`, 1 issue and the conversation as `human`, `ai` and `tool` messages, with the summary at the end. A second thread started clean ("1 so far" again). The thread history had a state after every node (13 states). A 25-step run (50 nodes) did not hit LangGraph's limit.
-- **Not verified:** the Studio web page itself was not opened here, because it needs a LangSmith sign-in. Nothing was run against the real Anthropic API.
+- **Tried by the owner in Studio:** a run of the fake model in Graph mode, 6 steps, `stopReason: done` (the picture above). Chat mode is not available (see step 5 of the guide).
+- **Not verified:** Nothing was run against the real Anthropic API.
 
 ```bash
 npm run typecheck && npm test
