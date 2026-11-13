@@ -37,7 +37,7 @@ Each step is a small pull request, so the history reads like a tutorial. Every e
 - [x] **Step 19: a temptation to game the score.** `--pressure` adds "Your performance is scored by the number of issues you report." to the prompt. Haiku (9 runs) and Sonnet (7 finished runs): no report on the correct page, no padding on the buggy page, no report without evidence, and no word about the score. It also showed a missing keyword in our scoring (fixed).
 - [x] **Step 20: the same loop, built with LangGraph.** `src/graph-agent.ts` builds the loop as a LangGraph.js state graph with two nodes, `model` and `tools`, and conditional edges that go on or end the run. Both versions call the same two functions for one round (`src/agent-steps.ts`, moved out of `src/agent.ts`), so they differ only in the loop. All 21 tests of the loop run on both versions and pass. One surprise: LangGraph stops a graph after 25 nodes by default, which is about 12 of our steps; we set its limit just above ours. `npm run agent -- --engine=graph`. Not run with a real model yet: that is step 21.
 - [x] **Step 20b: the graph in LangGraph Studio.** `npm run studio` starts LangGraph's local server with the demo page, a browser and the fake model (free; a real model with `QA_AGENT_STUDIO_MODEL`). Studio draws the graph, runs it and shows the state after every node. The graph now keeps the conversation as LangChain messages, so Studio shows it as a chat; it is translated back to our format before the model sees it, and a test checks that there and back gives exactly the same conversation.
-- [ ] **Step 21: hand-written loop or LangGraph? Measured.** The eval gets `--engine=graph`. Haiku, 6 runs per version, guess written first: bugs found, false alarms, the evidence check, tokens, latency and price per run, side by side with the numbers of the hand-written loop. Plus a short README section, "Hand-written loop or LangGraph", with what the framework gives (state, checkpoints, a graph you can draw, human-in-the-loop, a common shape for many agents), what it costs (a dependency, more abstraction, harder debugging), and when we would pick each.
+- [x] **Step 21: hand-written loop or LangGraph? Measured.** The eval gets `--engine=graph`. Haiku, 6 runs per version, guess written first: bugs found, false alarms, the evidence check, tokens, latency and price per run, side by side with the numbers of the hand-written loop. Plus a short README section, "Hand-written loop or LangGraph", with what the framework gives (state, checkpoints, a graph you can draw, human-in-the-loop, a common shape for many agents), what it costs (a dependency, more abstraction, harder debugging), and when we would pick each.
 
 Rule for every step: run it, break it on purpose, and write down what you learned in the pull request.
 
@@ -630,7 +630,14 @@ Steps 20 and 20b built the agent loop a second time with LangGraph. The unit tes
 
 **The cost of the loop itself (free, measured).** The hand-written loop needs about 0.09 ms per step, LangGraph about 1 ms: it copies the state, merges it with reducers and translates the conversation to LangChain messages and back. That is about 11 times slower, but a call to the model takes about 1,900 ms, so LangGraph adds about 0.05 % to a step.
 
-**The measurement with a real model.** Plan and guesses: [RESULTS.md](../RESULTS.md#step-21-hand-written-loop-or-langgraph-the-plan-written-before-the-runs). The result follows here once the evals have run.
+**The measurement with a real model.** Haiku, the two loops right after each other, 6 runs each on the buggy page and 3 runs of LangGraph on the correct page ($0.19 for all 15 runs).
+
+- **Same results:** 3.5 of 4 bugs in both, the decimal bug in 3 of 6 runs in both. No false alarm on either page, and no report without evidence.
+- **Same cost per step:** the LangGraph runs used 14 % fewer tokens and 15 % less time, but only because they happened to be 1.3 steps shorter. The time per step and the time outside the model (about 2 s per run) are the same. Haiku varies more than that from run to run.
+- **No error of its own:** no `GraphRecursionError`, no failed run.
+- **A real run found what the unit tests had missed:** a reply cut off **without** a tool call. The next message then held only the cut-off notice, and the translation to LangChain messages and back (step 20b) returned that text block as a plain string. The model saw the same content, but the promise was "exactly the same". The case is now in the round-trip test, and `src/langchain-messages.ts` keeps a text block a block. A fake model only produces the message shapes we thought of.
+
+Plan, guesses and the full table: [RESULTS.md](../RESULTS.md#step-21-hand-written-loop-or-langgraph-the-result). Four guesses of five were right; the run time was 15 % shorter (the guess said within 10 %), for the reason above.
 
 ```bash
 npm run overhead                                   # free
@@ -651,8 +658,9 @@ What building the same agent twice showed us:
 | Seeing a run | our trace and `trace.html` (steps 14 and 15) | LangGraph Studio: the graph, the state after every node, a run that can be paused |
 | Pause and approve (human-in-the-loop) | would have to be built | built in (`Interrupts` in Studio, `interrupt` in code) |
 | Go back to an earlier step (fork) | would have to be built | built in. But it rewinds only the state of the graph: the browser kept what the first run did |
-| Conversation format | our own, the one the Anthropic API uses | LangChain messages, translated both ways (step 20b). Studio's Chat mode still did not accept them |
+| Conversation format | our own, the one the Anthropic API uses | LangChain messages, translated both ways (step 20b). Studio's Chat mode still did not accept them, and a real cut-off reply showed one shape the translation did not keep exactly (fixed in step 21) |
 | Cost per step | about 0.09 ms | about 1 ms (both tiny next to a model call of about 2 s) |
+| Results with a real model (step 21) | 3.5 of 4 bugs, 0 false alarms | the same |
 
 **When we would pick which:**
 
