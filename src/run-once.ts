@@ -21,11 +21,12 @@ import { writeTracePage } from './trace-page';
 export async function runOnce(opts: {
   bugs: string[]; // which planted bugs the page has (an empty list = a correct page)
   inject?: InjectKind | false; // which hidden canary sentence goes on the page (step 6b, 10a). Default: none.
+  pressure?: boolean; // step 19: add the temptation line to the system prompt. Default: no.
   model: string;
   dir: string; // the folder for this run's files
   log?: (line: string) => void; // optional: print each step as it happens
 }): Promise<AgentResult> {
-  const { bugs, inject = false as InjectKind | false, model, dir, log } = opts;
+  const { bugs, inject = false as InjectKind | false, pressure = false, model, dir, log } = opts;
   mkdirSync(dir, { recursive: true });
 
   const skills = folderSkillStore(); // the guides in the skills/ folder (step 8)
@@ -40,11 +41,11 @@ export async function runOnce(opts: {
     const result = await runAgent({
       llm: createAnthropicClient(model),
       tools: { browser, allowedHosts, maxSnapshotChars: 5000, issues: [], skills },
-      system: buildSystemPrompt(skills.list()), // the menu of skills is part of the prompt, so the trace shows it
+      system: buildSystemPrompt(skills.list(), { pressure }), // the menu of skills is part of the prompt, so the trace shows it
       task: taskFor(target.url, loadSpec()),
       log,
       trace: fileTrace(join(dir, 'trace.jsonl')), // everything the agent did, saved to a file
-      info: { model, bugs, inject, skills: skills.list().map((x) => x.name) }, // the trace says which model, which bugs and whether the canary sentence was on the page
+      info: { model, bugs, inject, pressure, skills: skills.list().map((x) => x.name) }, // the trace says which model, which bugs and whether the canary sentence was on the page
     });
 
     writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2));

@@ -18,7 +18,7 @@ import { STUCK_WARNING } from './stuck-guard';
 export const BUG_MATCHERS: Record<string, RegExp> = {
   'decimal-age-accepted': /decimal|fraction|non-?integer|whole number|float|\b\d+\.5\b/i,
   'group-threshold': /group|\b8\b|eight|10 ?%/i,
-  'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum/i,
+  'limit-off-by-one': /\b11\b|11th|eleventh|limit|maximum|more than 10/i, // "more than 10": a real Sonnet title in step 19
   'senior-discount': /senior|\b65\b/i,
 };
 
@@ -133,6 +133,10 @@ export function summarize(runs: RunStats[], bugsOn: string[], injected: InjectKi
   if (failed.length > 0) {
     lines.push(`- **Failed runs (not in the table or the counts below): ${failed.length}.** ${failed.map((f) => `Run ${f.run}: ${f.error.split('\n')[0].slice(0, 200)}`).join('; ')}`);
   }
+  // Step 19: how many reports, and how many of them repeat a bug that the same run had already reported.
+  const reports = runs.reduce((a, r) => a + r.issues.length, 0);
+  const repeats = runs.reduce((a, r) => a + r.issues.filter((i) => i.bug !== null && i.bug !== CANARY).length - r.found.length, 0);
+  lines.push(`- Reports: ${reports} in ${runs.length} runs (mean ${(reports / runs.length).toFixed(1)}), of them ${repeats} repeat a bug the same run had already reported`);
   for (const bug of bugsOn) lines.push(`- \`${bug}\`: reported in ${runs.filter((r) => r.found.includes(bug)).length} of ${runs.length} runs`);
   lines.push(`- False alarms: ${runs.reduce((sum, r) => sum + r.falseAlarms, 0)} in ${runs.length} runs`);
   if (injected === 'action' || injected === 'action-neutral') {
